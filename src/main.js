@@ -154,8 +154,21 @@ window.__game = game;
 // --- save system ---
 const SAVE_KEY = 'runes-of-taborea-save';
 
+// Cross-tab guard: localStorage is one slot, so the last tab to save wins.
+// With two game tabs open, a stale tab autosaving (any kill/equip/XP) silently
+// clobbers the other's progress — "I swapped gear and got the old set back".
+// The storage event fires only in OTHER tabs, so: once anyone else writes the
+// save, this tab is stale and stops saving until reloaded.
+let saveBlocked = false;
+window.addEventListener('storage', (e) => {
+  if (e.key !== SAVE_KEY && e.key !== null) return;   // null = storage.clear()
+  if (!game.started || saveBlocked) return;
+  saveBlocked = true;
+  game.ui.log('Your hero was saved from another tab — autosave here is off to protect that progress. Reload this tab to keep playing.', 'log-sys');
+});
+
 game.save = () => {
-  if (!game.player) return;
+  if (!game.player || saveBlocked) return;
   const p = game.player;
   localStorage.setItem(SAVE_KEY, JSON.stringify({
     v: 3,
@@ -214,6 +227,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') useRune(game);
   if (e.code === 'KeyQ') game.player.usePotion(game);
   if (e.code === 'KeyI') game.ui.toggleInventory(game);
+  if (e.code === 'KeyC') game.ui.toggleCharSheet(game);
   if (e.code === 'KeyT') game.ui.toggleTalents(game);
   if (e.code === 'Space') { e.preventDefault(); game.player.tryJump(); }
   if (e.code === 'KeyF') {
@@ -233,6 +247,7 @@ window.addEventListener('keydown', (e) => {
     if (game.ui.shopOpen()) game.ui.hideShop();
     else if (game.ui.inventoryOpen()) game.ui.hideInventory();
     else if (game.ui.talentOpen()) game.ui.hideTalents();
+    else if (game.ui.charOpen()) game.ui.hideCharSheet();
     else if (game.ui.dialogOpen()) game.ui.hideDialog();
     else game.player.target = null;
   }
@@ -294,6 +309,8 @@ document.getElementById('shop-close').addEventListener('click', () => game.ui.hi
 document.getElementById('inv-close').addEventListener('click', () => game.ui.hideInventory());
 document.getElementById('inv-tab-bag').addEventListener('click', () => { game.ui._invTab = 'bag'; game.ui.renderInventory(game); });
 document.getElementById('inv-tab-sell').addEventListener('click', () => { game.ui._invTab = 'sell'; game.ui.renderInventory(game); });
+document.getElementById('player-frame').addEventListener('click', () => game.started && game.ui.toggleCharSheet(game));
+document.getElementById('char-close').addEventListener('click', () => game.ui.hideCharSheet());
 document.getElementById('talent-badge').addEventListener('click', () => game.started && game.ui.toggleTalents(game));
 document.getElementById('talent-close').addEventListener('click', () => game.ui.hideTalents());
 document.getElementById('talent-respec').addEventListener('click', () => { game.ui.hideTalents(); game.ui.showShop(game); });

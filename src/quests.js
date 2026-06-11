@@ -230,7 +230,7 @@ function makeChain(cfg) {
           action: () => { game.ui.hideDialog(); game.ui.showShop(game); },
         }, {
           label: 'Sell Loot',
-          action: () => { game.ui.hideDialog(); game.ui._invTab = 'sell'; game.ui.showInventory(game); },
+          action: () => { game.ui.hideDialog(); game.ui.showInventory(game, 'sell'); },
         });
       }
       if (this.current() && (this.bounty.status === 'ready' || this.bounty.status === 'active')) {

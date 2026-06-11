@@ -129,6 +129,7 @@
           <button id="inv-tab-bag" class="btn-ornate inv-tab active">Equipment</button>
           <button id="inv-tab-sell" class="btn-ornate inv-tab btn-dim">Sell to Barnaby</button>
         </div>
+        <div id="inv-mode-hint"></div>
         <div id="inv-equipped">
           <div class="equip-slot" data-slot="weapon"><span class="eq-label">Weapon</span><div class="eq-cell"></div></div>
           <div class="equip-slot" data-slot="armor"><span class="eq-label">Armor</span><div class="eq-cell"></div></div>
@@ -137,6 +138,22 @@
         <div id="inv-stats-summary"></div>
         <div id="inv-grid"></div>
         <div class="dialog-buttons"><button id="inv-close" class="btn-ornate btn-dim">Close</button></div>
+      </div>
+    </div>
+
+    <!-- character sheet -->
+    <div id="char-panel" class="hidden">
+      <div class="dialog-frame char-frame">
+        <div class="dialog-title">Character</div>
+        <div id="char-header">
+          <div class="portrait"><span id="char-icon" class="class-icon">⚔</span></div>
+          <div>
+            <div id="char-name" class="char-name">Adventurer</div>
+            <div id="char-sub" class="char-sub"></div>
+          </div>
+        </div>
+        <div id="char-rows"></div>
+        <div class="dialog-buttons"><button id="char-close" class="btn-ornate btn-dim">Close</button></div>
       </div>
     </div>
 
@@ -202,7 +219,7 @@
         </button>
       </div>
       <p class="title-foot">A second class awaits at level 10 — as is the old custom of Taborea.</p>
-      <p class="title-controls">WASD move · drag to look · click / Tab target · 1–4 skills · 9/0/- ultimates · I bag · T talents · F interact</p>
+      <p class="title-controls">WASD move · drag to look · click / Tab target · 1–4 skills · 9/0/- ultimates · I bag · C character · T talents · F interact</p>
     </div>
   </div>
 

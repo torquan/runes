@@ -294,7 +294,8 @@ export function createUi() {
         : p.cls.icon;
       // equipped-gear summary on the char-frame hover (native title, like the pouches)
       const t = totalEquippedStats(p.equipped);
-      $('player-frame').title = `${p.name}\nEquipped: ${statSummary(t) || 'nothing'}`;
+      $('player-frame').title = `${p.name}\nEquipped: ${statSummary(t) || 'nothing'}\nClick to open the character sheet (C)`;
+      if (this.charOpen()) this.renderCharSheet(game);   // keep open sheet live on gear swaps
     },
 
     // ---------- dual-class choice ----------
@@ -388,8 +389,10 @@ export function createUi() {
     shopOpen() { return !$('shop-panel').classList.contains('hidden'); },
 
     // ---------- inventory / gear ----------
-    showInventory(game) {
-      this._invTab = this._invTab || 'bag';
+    // always opens on Equipment unless explicitly asked for sell (Barnaby's
+    // Sell Loot button) — a sticky sell tab once cost someone their gear
+    showInventory(game, tab = 'bag') {
+      this._invTab = tab;
       this.renderInventory(game);
       $('inventory-panel').classList.remove('hidden');
     },
@@ -402,9 +405,16 @@ export function createUi() {
       const selling = this._invTab === 'sell';
       // hide any lingering tooltip (cells get recreated on equip/sell)
       const oldTip = $('inv-tooltip'); if (oldTip) oldTip.style.display = 'none';
-      // tabs active state
+      // tabs active state (btn-dim must swap too, or the active tab looks dead)
       $('inv-tab-bag').classList.toggle('active', !selling);
+      $('inv-tab-bag').classList.toggle('btn-dim', selling);
       $('inv-tab-sell').classList.toggle('active', selling);
+      $('inv-tab-sell').classList.toggle('btn-dim', !selling);
+      const hint = $('inv-mode-hint');
+      hint.textContent = selling
+        ? 'SELLING — click an item to sell it to Barnaby'
+        : 'Click a bag item to equip it · click equipped gear to unequip';
+      hint.classList.toggle('selling', selling);
 
       // equipped row
       for (const slot of ['weapon', 'armor', 'trinket']) {
@@ -423,13 +433,16 @@ export function createUi() {
 
       // 24-slot grid
       const grid = $('inv-grid');
+      grid.classList.toggle('selling', selling);
       grid.innerHTML = '';
       for (let i = 0; i < 24; i++) {
         const it = p.inventory[i];
         const cell = document.createElement('div');
         cell.className = 'inv-cell' + (it ? ` r-${it.rarity}` : '');
         if (it) {
-          cell.innerHTML = this._itemCellHTML(it);
+          // in sell mode every item wears its price — no ambiguity about the click
+          cell.innerHTML = this._itemCellHTML(it)
+            + (selling ? `<span class="inv-price">${it.value}g</span>` : '');
           this._attachTip(cell, it, p);
           cell.onclick = selling
             ? () => { p.sellItem(game, it); this.renderInventory(game); this.update(game); }
@@ -484,6 +497,52 @@ export function createUi() {
       return body;
     },
 
+    // ---------- character sheet (opens from the player frame / C) ----------
+    showCharSheet(game) { this.renderCharSheet(game); $('char-panel').classList.remove('hidden'); },
+    hideCharSheet() { $('char-panel').classList.add('hidden'); },
+    charOpen() { return !$('char-panel').classList.contains('hidden'); },
+    toggleCharSheet(game) { this.charOpen() ? this.hideCharSheet() : this.showCharSheet(game); },
+
+    // all strings here are developer-authored (class/item/branch names) — HTML-safe
+    renderCharSheet(game) {
+      const p = game.player;
+      $('char-icon').textContent = p.secondary ? `${p.cls.icon}${p.secondary.icon}` : p.cls.icon;
+      $('char-name').textContent = p.name;
+      $('char-sub').textContent = `Level ${p.level} · ${p.xp} / ${xpForLevel(p.level)} XP`;
+
+      const pct = (v) => `${Math.round(v * 100)}%`;
+      // breakdown note: only the non-zero sources, e.g. "+12 gear · +3 runes"
+      const note = (parts) => parts.filter(([v]) => v).map(([v, l]) => `+${v} ${l}`).join(' · ');
+      const row = (label, value, n = '') =>
+        `<div class="char-row"><span>${label}</span><span>${n ? `<small>${n}</small> ` : ''}<b>${value}</b></span></div>`;
+
+      const gearDmg = Math.round(p.gearStat('dmg'));
+      const gearHp = Math.round(p.gearStat('hp'));
+
+      let html = `<div class="char-section">Attributes</div>`;
+      html += row('Health', p.maxHp, note([[gearHp, 'gear'], [p.trainHp * 80, 'training']]));
+      html += row('Mana', p.maxMp);
+      html += row('Damage', p.baseDamage(), note([[gearDmg, 'gear'], [p.runeBonus, 'runes'], [p.trainDmg * 5, 'training']]));
+      html += row('Crit Chance', pct(p.critChance()));
+      html += row('Move Speed', pct(p.speed / 6.5), p.boots ? 'swift boots' : '');
+      html += row('Healing Power', `+${pct(p.gearStat('healPower'))}`);
+
+      html += `<div class="char-section">Talents</div>`;
+      for (const branch of BRANCHES) html += row(branch.name, `${ranks(p.talents, branch.id)} / 15`);
+      html += row('Unspent points', p.talentPoints());
+
+      html += `<div class="char-section">Equipment</div>`;
+      for (const slot of ['weapon', 'armor', 'trinket']) {
+        const it = p.equipped[slot];
+        html += row(slot[0].toUpperCase() + slot.slice(1),
+          it ? `<span style="color:${rarityColor(it.rarity)}">${it.name}</span>` : '<span class="char-empty">— empty —</span>');
+      }
+      const t = totalEquippedStats(p.equipped);
+      html += `<div class="char-gear-sum">${statSummary(t) || 'No gear equipped'}</div>`;
+
+      $('char-rows').innerHTML = html;
+    },
+
     // ---------- talents ----------
     showTalents(game) { this.renderTalents(game); $('talent-panel').classList.remove('hidden'); },
     hideTalents() { $('talent-panel').classList.add('hidden'); },
@@ -498,6 +557,7 @@ export function createUi() {
       $('talent-count').textContent = n;
       badge.classList.toggle('has-points', n > 0);
       if (this.talentOpen()) this.renderTalents(game);  // keep open panel live
+      if (this.charOpen()) this.renderCharSheet(game);  // sheet too (level/talent changes)
     },
     nudgeTalentBadge() {
       const badge = $('talent-badge');

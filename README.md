@@ -23,6 +23,9 @@ npm run dev    # → http://localhost:5173
 | `Space` | Jump (some things must be jumped over…) |
 | `Q` | Drink a Pioneer's Draught |
 | `R` | Consume a glowing rune (+1 weapon damage, permanent) |
+| `I` | Open the bag (equip gear; sell tab when trading with Barnaby) |
+| `C` (or click your portrait) | Character sheet |
+| `T` | Talents |
 | `Esc` | Close shop/dialog / clear target |
 
 ## What's in the box
