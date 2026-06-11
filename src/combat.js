@@ -55,6 +55,11 @@ const ndc = new THREE.Vector2();
 const projectiles = [];
 let pendingMelee = null; // { t, enemy, dmg, crit }
 
+// big bodies have edges: range checks measure to the model's bulk, not its center
+function reachOf(enemy) {
+  return (enemy.group.scale.x || 1) * 0.8;
+}
+
 export function clickTarget(game, clientX, clientY) {
   const rect = game.renderer.domElement.getBoundingClientRect();
   ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
@@ -175,7 +180,7 @@ export function castSkill(game, index) {
   if (needsTarget) {
     const t = p.target;
     if (!t || !t.alive) { game.ui.log('You need a target.', 'log-sys'); return; }
-    if (p.group.position.distanceTo(t.group.position) > skill.range) {
+    if (p.group.position.distanceTo(t.group.position) > skill.range + reachOf(t)) {
       game.ui.log('Target is out of range.', 'log-sys');
       return;
     }
@@ -243,7 +248,7 @@ function resolveSkill(game, skill) {
     let hits = 0;
     for (const e of game.enemies) {
       if (!e.alive) continue;
-      if (e.group.position.distanceTo(center) <= skill.aoeRadius) {
+      if (e.group.position.distanceTo(center) <= skill.aoeRadius + reachOf(e)) {
         const { dmg, crit } = rollDamage(p, skill.mult);
         applyDamage(game, e, dmg, crit, skill.name);
         hits++;
@@ -279,7 +284,7 @@ export function updateCombat(game, dt) {
   const t = p.target;
   if (p.alive && t && t.alive && !p.casting && p.attackCd <= 0) {
     const dist = p.group.position.distanceTo(t.group.position);
-    if (dist <= p.cls.autoRange) {
+    if (dist <= p.cls.autoRange + reachOf(t)) {
       p.attackCd = 1.7;
       p.anim.attackT = 0;
       v1.subVectors(t.group.position, p.group.position);
@@ -301,7 +306,7 @@ export function updateCombat(game, dt) {
       const m = pendingMelee;
       pendingMelee = null;
       if (m.enemy.alive && p.alive &&
-          p.group.position.distanceTo(m.enemy.group.position) < p.cls.autoRange + 1.5) {
+          p.group.position.distanceTo(m.enemy.group.position) < p.cls.autoRange + reachOf(m.enemy) + 1.5) {
         applyDamage(game, m.enemy, m.dmg, m.crit, 'attack');
       }
     }

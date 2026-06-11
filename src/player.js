@@ -14,12 +14,12 @@ export const CLASSES = {
     ],
   },
   scout: {
-    name: 'Scout', icon: '➶', ranged: true, autoRange: 17,
+    name: 'Scout', icon: '➶', ranged: true, autoRange: 23,
     hpMod: 1.0, mpMod: 1.0, dmgMod: 1.0,
     skills: [
-      { id: 'qshot', name: 'Quick Shot', icon: '➶', color: '#8aff9d', kind: 'damage', mult: 1.25, range: 18, mana: 0, cd: 0, cast: 0, desc: 'A fast arrow loosed without aim — mostly.' },
-      { id: 'vamp', name: 'Vampire Arrow', icon: '❥', color: '#ff6b8a', kind: 'damage', mult: 2.0, selfHealPct: 0.5, range: 18, mana: 14, cd: 6, cast: 0, desc: 'A cursed arrow that returns half its damage as life.' },
-      { id: 'rain', name: 'Arrow Rain', icon: '⁂', color: '#bfff8a', kind: 'aoe', aoeCenter: 'target', aoeRadius: 5, mult: 1.45, range: 18, mana: 22, cd: 10, cast: 0, desc: 'Darken the sky over your target.' },
+      { id: 'qshot', name: 'Quick Shot', icon: '➶', color: '#8aff9d', kind: 'damage', mult: 1.25, range: 24, mana: 0, cd: 0, cast: 0, desc: 'A fast arrow loosed without aim — mostly.' },
+      { id: 'vamp', name: 'Vampire Arrow', icon: '❥', color: '#ff6b8a', kind: 'damage', mult: 2.0, selfHealPct: 0.5, range: 24, mana: 14, cd: 6, cast: 0, desc: 'A cursed arrow that returns half its damage as life.' },
+      { id: 'rain', name: 'Arrow Rain', icon: '⁂', color: '#bfff8a', kind: 'aoe', aoeCenter: 'target', aoeRadius: 5, mult: 1.45, range: 24, mana: 22, cd: 10, cast: 0, desc: 'Darken the sky over your target.' },
       { id: 'instinct', name: 'Survival Instinct', icon: '✚', color: '#9dff8a', kind: 'heal', healPct: 0.3, mana: 15, cd: 15, cast: 0, desc: 'Field-dress your wounds, restoring 30% health.' },
     ],
   },
@@ -353,8 +353,8 @@ export function updatePlayer(game, dt, elapsed) {
   // --- target ring ---
   if (player.target && player.target.alive) {
     player.ring.visible = true;
-    const scale = player.target.elite ? 2.2 : 1.1;
-    player.ring.scale.setScalar(scale);
+    const bodyScale = player.target.group.scale.x || 1;
+    player.ring.scale.setScalar(1.1 * bodyScale + (player.target.elite ? 0.3 : 0));
     player.ring.position.copy(player.target.group.position);
     player.ring.position.y += 0.05;
     player.ring.rotation.z = elapsed * 0.8;
