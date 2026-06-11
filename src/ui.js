@@ -482,15 +482,19 @@ export function createUi() {
       const color = rarityColor(item.rarity);
       let body = `<div class="tip-name" style="color:${color}">${item.name}</div>`;
       body += `<div class="tip-sub">${RARITY[item.rarity].label} ${item.slot}${item.unique ? ' · Unique' : ''}</div>`;
-      // stat lines with compare deltas vs currently equipped in that slot
+      // stat lines with compare deltas vs currently equipped in that slot —
+      // include axes only the equipped item has, so losses aren't hidden
       const axes = ['dmg', 'hp', 'crit', 'speed', 'healPower'];
       for (const ax of axes) {
-        const v = item.stats[ax] || 0; if (!v) continue;
+        const v = item.stats[ax] || 0;
         const e = equipped ? (equipped.stats[ax] || 0) : 0;
+        if (!v && !e) continue;
         const d = v - e;
         const fmt = (n) => (ax === 'crit' || ax === 'speed' || ax === 'healPower') ? `${(n * 100).toFixed(1)}%` : `${Math.round(n)}`;
         const cls = d > 0 ? 'stat-up' : d < 0 ? 'stat-down' : '';
-        body += `<div class="tip-stat">+${fmt(v)} ${ax}${equipped && d !== 0 ? ` <span class="${cls}">(${d > 0 ? '+' : ''}${fmt(d)})</span>` : ''}</div>`;
+        body += v
+          ? `<div class="tip-stat">+${fmt(v)} ${ax}${equipped && d !== 0 ? ` <span class="${cls}">(${d > 0 ? '+' : ''}${fmt(d)})</span>` : ''}</div>`
+          : `<div class="tip-stat"><span class="stat-down">−${fmt(e)} ${ax}</span></div>`;
       }
       if (item.flavor) body += `<div class="tip-flavor">${item.flavor}</div>`;
       if (item.value) body += `<div class="tip-value">Sells for ${item.value} g</div>`;
