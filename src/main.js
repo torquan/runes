@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { buildDungeon } from './dungeon.js';
-import { heightAt } from './noise.js';
-import { spawnEnemies, spawnNpc, updateEnemies, updateNpc } from './entities.js';
+import { buildHighlands } from './highlands.js';
+import { heightAt, HIGHLANDS } from './noise.js';
+import { spawnEnemies, spawnNpc, spawnGateNpc, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
 import { createPlayer, updatePlayer, CLASSES } from './player.js';
 import { castSkill, updateCombat, clickTarget, tabTarget, useRune, createFx } from './combat.js';
-import { createQuests } from './quests.js';
+import { createQuests, createHighlandQuests } from './quests.js';
 import { createUi } from './ui.js';
 import { initAudio, sfx } from './audio.js';
 
@@ -29,24 +30,30 @@ window.addEventListener('resize', () => {
 // --- build the world up front so it sits behind the title screen ---
 const world = buildWorld(scene);
 const dungeon = buildDungeon(scene);
+const highlands = buildHighlands(scene);
 const enemies = spawnEnemies(scene);
 const npc = spawnNpc(scene);
-scene.add(npc.group);
+const gateNpc = spawnGateNpc(scene);
+scene.add(npc.group, gateNpc.group);
 
 const game = {
-  scene, camera, renderer, world, dungeon, enemies, npc,
+  scene, camera, renderer, world, dungeon, highlands, enemies,
+  npc, gateNpc, npcs: [npc, gateNpc],
   player: null,
   ui: createUi(),
   fx: createFx(scene),
   quests: createQuests(),
+  highlandQuests: createHighlandQuests(),
   audio: sfx,
-  input: { keys: new Set(), mouseForward: false },
+  input: { keys: new Set(), mouseForward: false, lmb: false, cursorX: 0 },
   classes: CLASSES,
   started: false,
   zone: 'world',
+  slain: new Set(),
+  gates: { korgrim: false, vexnar: false, morgrath: false },
 };
 
-// --- zone atmosphere: golden meadow vs crypt gloom ---
+// --- zone atmosphere: golden meadow vs crypt gloom vs ashen highlands ---
 function setZone(zone) {
   game.zone = zone;
   if (zone === 'crypt') {
@@ -57,6 +64,16 @@ function setZone(zone) {
     world.sky.visible = false;
     world.hemi.intensity = 0.25;
     world.sunLight.intensity = 0.1;
+  } else if (zone === 'highlands') {
+    scene.fog.color.set(0x3a140c);     // smoky red-brown
+    scene.fog.near = 28;
+    scene.fog.far = 140;               // hazier than meadow, clearer than crypt
+    scene.background.set(0x2a0e08);    // dark ember sky
+    world.sky.visible = false;         // pocket-of-ash look; the lava lights carry it
+    world.hemi.intensity = 0.45;
+    world.hemi.color.set(0xff8050);    // warm ambient
+    world.sunLight.intensity = 0.6;
+    world.sunLight.color.set(0xff7a40);
   } else {
     scene.fog.color.set(0xc4d4e0);
     scene.fog.near = 60;
@@ -64,9 +81,12 @@ function setZone(zone) {
     scene.background.set(0x9ec4e8);
     world.sky.visible = true;
     world.hemi.intensity = 0.85;
+    world.hemi.color.set(0xbed8ff);    // RESTORE original hemi color (highlands mutates it)
     world.sunLight.intensity = 1.6;
+    world.sunLight.color.set(0xffe0b0); // RESTORE original sun color
   }
 }
+game.setZone = setZone;
 
 function usePortal(portal) {
   const p = game.player;
@@ -96,9 +116,37 @@ function nearestPortal() {
   if (!game.player) return null;
   const pos = game.player.group.position;
   for (const portal of dungeon.portals) {
+    // the crypt entrance only exists once the Pale King has fallen
+    if (portal.dest.zone === 'crypt' && !game.quests.reached('ossus')) continue;
     if (Math.hypot(pos.x - portal.x, pos.z - portal.z) < 4) return portal;
   }
   return null;
+}
+
+// content reveals itself as the quest chain advances: each trial arena and its
+// boss appear when Barnaby can offer that quest; the crypt opens after Morgrath
+const GATE_FLAVOR = {
+  korgrim: 'Far to the north, the earth begins to tremble…',
+  vexnar: 'A winged shadow crosses the eastern rim…',
+  morgrath: 'Something pale stirs among the southwestern stones…',
+};
+let gatesInitialized = false;
+function updateGates() {
+  for (const kind of ['korgrim', 'vexnar', 'morgrath']) {
+    const open = game.quests.reached(kind);
+    world.trialArenas[kind].visible = open;
+    if (open && !game.gates[kind]) {
+      game.gates[kind] = true;
+      spawnTrialBoss(game, kind);
+      if (gatesInitialized) game.ui.log(GATE_FLAVOR[kind], 'log-quest');
+    }
+  }
+  const cryptOpen = game.quests.reached('ossus');
+  if (cryptOpen && !dungeon.entrance.visible && gatesInitialized) {
+    game.ui.log('Northwest of camp, an ancient archway grinds open…', 'log-quest');
+  }
+  dungeon.entrance.visible = cryptOpen;
+  gatesInitialized = true;
 }
 game.onCast = (i) => castSkill(game, i);
 window.__game = game;
@@ -110,13 +158,19 @@ game.save = () => {
   if (!game.player) return;
   const p = game.player;
   localStorage.setItem(SAVE_KEY, JSON.stringify({
-    v: 2,
+    v: 3,
     classId: p.classId, secondaryId: p.secondaryId,
     level: p.level, xp: p.xp, gold: p.gold,
     runes: p.runes, runeBonus: p.runeBonus,
     potions: p.potions, trainDmg: p.trainDmg, trainHp: p.trainHp,
     trainCrit: p.trainCrit, boots: p.boots,
+    inventory: p.inventory,
+    equipped: p.equipped,
+    talents: p.talents,
+    spent: p.talentSpent(),     // derived; written for forward-compat, recomputed on load
+    slain: [...game.slain],
     quests: game.quests.serialize(),
+    highlandQuests: game.highlandQuests.serialize(),
   }));
 };
 
@@ -125,13 +179,14 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    return s && (s.v === 1 || s.v === 2) && CLASSES[s.classId] ? s : null;
+    return s && (s.v === 1 || s.v === 2 || s.v === 3) && CLASSES[s.classId] ? s : null;
   } catch { return null; }
 }
 
 // console helper: restore a pre-save-system hero, e.g. __veteran('scout')
 window.__veteran = (classId = 'warrior') => {
   if (!CLASSES[classId]) { console.warn('classes:', Object.keys(CLASSES).join(', ')); return; }
+  // writes a v:1 stub; inventory/equipped default-fill on load
   localStorage.setItem(SAVE_KEY, JSON.stringify({
     v: 1, classId, secondaryId: null,
     level: 10, xp: 0, gold: 400, runes: 3, runeBonus: 0,
@@ -152,21 +207,32 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Tab') { e.preventDefault(); tabTarget(game); }
   if (e.code.startsWith('Digit')) {
     const n = parseInt(e.code.slice(5), 10);
-    if (n >= 1 && n <= 8) castSkill(game, n - 1);
+    if (n >= 1 && n <= 9) castSkill(game, n - 1);   // 1–9 -> indices 0–8
+    else if (n === 0) castSkill(game, 9);           // 0 -> index 9
   }
+  if (e.code === 'Minus') castSkill(game, 10);       // - -> 11th slot (3rd capstone)
   if (e.code === 'KeyR') useRune(game);
   if (e.code === 'KeyQ') game.player.usePotion(game);
+  if (e.code === 'KeyI') game.ui.toggleInventory(game);
+  if (e.code === 'KeyT') game.ui.toggleTalents(game);
   if (e.code === 'Space') { e.preventDefault(); game.player.tryJump(); }
   if (e.code === 'KeyF') {
-    const portal = nearestPortal();
-    if (game.player.group.position.distanceTo(npc.group.position) < 5) {
-      game.quests.openDialog(game);
-    } else if (portal && game.player.alive) {
-      usePortal(portal);
+    const p = game.player.group.position;
+    const dNpc = p.distanceTo(npc.group.position);
+    const dGate = p.distanceTo(gateNpc.group.position);
+    if (dNpc < 5 && dNpc <= dGate) {
+      game.quests.openDialog(game);              // Barnaby
+    } else if (dGate < 5) {
+      game.highlandQuests.openDialog(game);      // Emberwarden Kaska
+    } else {
+      const portal = nearestPortal();            // crypt is still a walk-in/portal pocket
+      if (portal && game.player.alive) usePortal(portal);
     }
   }
   if (e.code === 'Escape') {
     if (game.ui.shopOpen()) game.ui.hideShop();
+    else if (game.ui.inventoryOpen()) game.ui.hideInventory();
+    else if (game.ui.talentOpen()) game.ui.hideTalents();
     else if (game.ui.dialogOpen()) game.ui.hideDialog();
     else game.player.target = null;
   }
@@ -174,18 +240,25 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => game.input.keys.delete(e.code));
 window.addEventListener('blur', () => game.input.keys.clear());
 
-// --- mouse: drag = orbit camera, click = target, both buttons = run ---
+// --- mouse: drag = orbit camera, click = target, both buttons (or W+LMB) = run-steer ---
+// While run-steering, yaw is position-based (cursor offset from screen center =
+// continuous turn rate, applied per-frame in updatePlayer) — not drag deltas.
 let dragging = false, dragMoved = 0, lastX = 0, lastY = 0;
 const mouseButtons = new Set();
+const steerActive = () =>
+  game.input.mouseForward || (mouseButtons.has(0) && game.input.keys.has('KeyW'));
 canvas.addEventListener('mousedown', (e) => {
   mouseButtons.add(e.button);
   game.input.mouseForward = mouseButtons.has(0) && mouseButtons.has(2);
+  game.input.lmb = mouseButtons.has(0);
+  game.input.cursorX = e.clientX;
   dragging = true;
   dragMoved = 0;
   lastX = e.clientX;
   lastY = e.clientY;
 });
 window.addEventListener('mousemove', (e) => {
+  game.input.cursorX = e.clientX;
   if (!dragging || !game.started) return;
   const dx = e.clientX - lastX, dy = e.clientY - lastY;
   dragMoved += Math.abs(dx) + Math.abs(dy);
@@ -194,25 +267,27 @@ window.addEventListener('mousemove', (e) => {
   if (dragMoved > 4) {
     canvas.classList.add('dragging');
     const cam = game.player.cam;
-    cam.yaw -= dx * 0.008;
+    if (!steerActive()) cam.yaw -= dx * 0.008;
     cam.pitch = THREE.MathUtils.clamp(cam.pitch + dy * 0.005, 0.05, 1.25);
   }
 });
 window.addEventListener('mouseup', (e) => {
   if (!dragging) return;
-  const wasMouseRun = game.input.mouseForward;
+  const wasSteering = steerActive();
   mouseButtons.delete(e.button);
   game.input.mouseForward = mouseButtons.has(0) && mouseButtons.has(2);
+  game.input.lmb = mouseButtons.has(0);
   if (mouseButtons.size > 0) return; // still steering with the other button
   dragging = false;
   canvas.classList.remove('dragging');
-  if (dragMoved <= 4 && game.started && e.target === canvas && !wasMouseRun) {
+  if (dragMoved <= 4 && game.started && e.target === canvas && !wasSteering) {
     clickTarget(game, e.clientX, e.clientY);
   }
 });
 window.addEventListener('blur', () => {
   mouseButtons.clear();
   game.input.mouseForward = false;
+  game.input.lmb = false;
 });
 canvas.addEventListener('wheel', (e) => {
   if (!game.started) return;
@@ -225,6 +300,12 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 document.getElementById('rune-pouch').addEventListener('click', () => game.started && useRune(game));
 document.getElementById('potion-pouch').addEventListener('click', () => game.started && game.player.usePotion(game));
 document.getElementById('shop-close').addEventListener('click', () => game.ui.hideShop());
+document.getElementById('inv-close').addEventListener('click', () => game.ui.hideInventory());
+document.getElementById('inv-tab-bag').addEventListener('click', () => { game.ui._invTab = 'bag'; game.ui.renderInventory(game); });
+document.getElementById('inv-tab-sell').addEventListener('click', () => { game.ui._invTab = 'sell'; game.ui.renderInventory(game); });
+document.getElementById('talent-badge').addEventListener('click', () => game.started && game.ui.toggleTalents(game));
+document.getElementById('talent-close').addEventListener('click', () => game.ui.hideTalents());
+document.getElementById('talent-respec').addEventListener('click', () => { game.ui.hideTalents(); game.ui.showShop(game); });
 document.getElementById('respawn-btn').addEventListener('click', () => {
   setZone('world');
   game.player.respawn(game);
@@ -277,16 +358,26 @@ function startGame(classId, saved) {
     p.trainHp = saved.trainHp ?? 0;
     p.trainCrit = saved.trainCrit ?? 0;
     p.boots = saved.boots ?? false;
+    p.inventory = saved.inventory ?? [];
+    p.equipped = saved.equipped ?? { weapon: null, armor: null, trinket: null };
+    // migrate partial equipped (v2/old v3) so all three keys exist:
+    p.equipped.weapon ??= null; p.equipped.armor ??= null; p.equipped.trinket ??= null;
+    // talents: default-fill on any save lacking them (v1/v2/old-v3); ignore stored `spent` (recomputed)
+    p.talents = saved.talents ?? { onslaught: 0, bulwark: 0, pathfinder: 0 };
+    p.talents.onslaught ??= 0; p.talents.bulwark ??= 0; p.talents.pathfinder ??= 0;
     if (saved.secondaryId) p.chooseSecondary(game, saved.secondaryId, true);
     p.recalcStats();
     p.hp = p.maxHp;
     p.mp = p.maxMp;
     game.quests.load(saved.quests);
+    game.highlandQuests.load(saved.highlandQuests);   // no-ops on undefined (old saves)
+    game.slain = new Set(saved.slain ?? []);
   }
 
   game.ui.buildActionBar(game, game.onCast);
   game.ui.refreshQuestTracker(game.quests);
   game.ui.refreshIdentity(game);
+  game.ui.refreshTalentBadge(game);     // show/populate the talent badge
   game.started = true;
 
   const title = document.getElementById('title-screen');
@@ -319,19 +410,34 @@ function tick() {
   const elapsed = clock.elapsedTime;
 
   if (game.started) {
+    updateGates();
     updatePlayer(game, dt, elapsed);
     updateEnemies(game, dt, elapsed);
     updateCombat(game, dt);
     world.update(dt, elapsed, game.player.group.position);
+    highlands.update(elapsed);
 
     const npcDist = updateNpc(npc, game, elapsed);
+    const gateDist = updateNpc(gateNpc, game, elapsed);
     const portal = nearestPortal();
-    if (npcDist < 5 && !game.ui.dialogOpen() && game.player.alive) {
+    const p = game.player.group.position;
+    const nearSign = p.distanceTo(highlands.signPos) < 6 && p.x < HIGHLANDS.GATE_X;
+
+    if (game.player.alive && (npcDist < 5 || gateDist < 5) && !game.ui.dialogOpen()) {
       game.ui.setInteractPrompt(true, 'Talk');
+    } else if (nearSign && !game.ui.dialogOpen()) {
+      game.ui.setInteractPrompt(true, 'The Ashen Highlands — recommended level 55+');
     } else if (portal && game.player.alive) {
       game.ui.setInteractPrompt(true, portal.label);
     } else {
       game.ui.setInteractPrompt(false);
+    }
+
+    // one-time scorched-signpost flavor as the player first nears the pass
+    if (!game._sawHighlandSign && game.player.alive &&
+        p.distanceTo(highlands.gatePos) < 10) {
+      game._sawHighlandSign = true;
+      game.ui.log('A scorched signpost: "AHEAD — THE ASHEN HIGHLANDS. Cinders, wyrms, and worse. Turn back unless you have seen fifty-five summers (level 55)."', 'log-quest');
     }
 
     dungeon.update(elapsed);
@@ -343,7 +449,10 @@ function tick() {
     camera.position.set(Math.sin(titleAngle) * 26, 12, Math.cos(titleAngle) * 26);
     camera.lookAt(0, 2, 0);
     world.update(dt, elapsed, null);
-    updateNpc(npc, { player: { group: { position: camera.position } } }, elapsed);
+    highlands.update(elapsed);
+    const fakeGame = { player: { group: { position: camera.position } } };
+    updateNpc(npc, fakeGame, elapsed);
+    updateNpc(gateNpc, fakeGame, elapsed);
   }
 
   renderer.render(scene, camera);

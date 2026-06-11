@@ -1,35 +1,35 @@
 import * as THREE from 'three';
-import { heightAt } from './noise.js';
+import { heightAt, HIGHLANDS } from './noise.js';
 import { buildBoar, buildWolf, buildHumanoid, buildDragon, animateBeast, animateHumanoid } from './characters.js';
 
 const ENEMY_TYPES = {
   boar: {
-    name: 'Young Boar', level: 1, hp: 60, dmgMin: 3, dmgMax: 7, xp: 28,
+    name: 'Young Boar', level: 1, hp: 60, dmgMin: 3, dmgMax: 7, xp: 25,
     speed: 3.2, aggroRadius: 0, attackRange: 1.7, gold: [1, 4], build: () => buildBoar(false),
   },
   wolf: {
-    name: 'Forest Wolf', level: 3, hp: 120, dmgMin: 7, dmgMax: 12, xp: 60,
+    name: 'Forest Wolf', level: 3, hp: 150, dmgMin: 8, dmgMax: 14, xp: 55,
     speed: 4.6, aggroRadius: 11, attackRange: 1.8, gold: [3, 8], build: () => buildWolf(),
   },
   boss: {
-    name: 'Bodo the Ravager', level: 5, hp: 520, dmgMin: 13, dmgMax: 20, xp: 320,
+    name: 'Bodo the Ravager', level: 5, hp: 1400, dmgMin: 18, dmgMax: 28, xp: 100,
     speed: 4.0, aggroRadius: 14, attackRange: 3.2, gold: [40, 60], build: () => buildBoar(true),
     elite: true,
   },
   bandit: {
-    name: 'Grimblade Bandit', level: 8, hp: 300, dmgMin: 14, dmgMax: 20, xp: 140,
+    name: 'Grimblade Bandit', level: 8, hp: 450, dmgMin: 22, dmgMax: 32, xp: 35,
     speed: 5.2, aggroRadius: 10, attackRange: 2.2, gold: [8, 15],
     build: () => buildHumanoid('bandit'), humanoid: true,
   },
   banditking: {
-    name: 'Rurik the Red', level: 12, hp: 1600, dmgMin: 24, dmgMax: 34, xp: 850,
+    name: 'Rurik the Red', level: 12, hp: 3000, dmgMin: 75, dmgMax: 110, xp: 120,
     speed: 4.6, aggroRadius: 13, attackRange: 2.9, gold: [80, 120],
     build: () => { const g = buildHumanoid('banditking'); g.scale.setScalar(1.35); return g; },
     humanoid: true, elite: true,
   },
   // ---- the Trials: endgame bosses with mechanics ----
   korgrim: {
-    name: 'Korgrim the Mountain', level: 35, hp: 28000, dmgMin: 150, dmgMax: 210, xp: 5000,
+    name: 'Korgrim the Mountain', level: 25, hp: 24000, dmgMin: 150, dmgMax: 210, xp: 600,
     speed: 3.6, aggroRadius: 13, attackRange: 4.2, gold: [600, 900], respawn: 120, leash: 50,
     build: () => { const g = buildHumanoid('giant'); g.scale.setScalar(2.7); return g; },
     humanoid: true, elite: true,
@@ -41,7 +41,7 @@ const ENEMY_TYPES = {
     }],
   },
   vexnar: {
-    name: 'Vexnar the Ash Dragon', level: 45, hp: 45000, dmgMin: 190, dmgMax: 260, xp: 9000,
+    name: 'Vexnar the Ash Dragon', level: 30, hp: 32000, dmgMin: 190, dmgMax: 260, xp: 1000,
     speed: 4.4, aggroRadius: 14, attackRange: 4.6, gold: [1000, 1500], respawn: 150, leash: 50,
     build: () => buildDragon(),
     elite: true,
@@ -53,7 +53,7 @@ const ENEMY_TYPES = {
     }],
   },
   morgrath: {
-    name: 'Morgrath, the Pale King', level: 58, hp: 70000, dmgMin: 230, dmgMax: 310, xp: 15000,
+    name: 'Morgrath, the Pale King', level: 37, hp: 40000, dmgMin: 230, dmgMax: 310, xp: 2000,
     speed: 4.8, aggroRadius: 13, attackRange: 3.4, gold: [1800, 2600], respawn: 180, leash: 50,
     build: () => { const g = buildHumanoid('paleking'); g.scale.setScalar(1.8); return g; },
     humanoid: true, elite: true,
@@ -66,20 +66,20 @@ const ENEMY_TYPES = {
     summons: { at: [0.75, 0.5, 0.25], kind: 'thrall', count: 2 },
   },
   thrall: {
-    name: 'Risen Thrall', level: 35, hp: 1400, dmgMin: 90, dmgMax: 130, xp: 350,
+    name: 'Risen Thrall', level: 25, hp: 1400, dmgMin: 90, dmgMax: 130, xp: 60,
     speed: 5.6, aggroRadius: 40, attackRange: 2.2, gold: [20, 40],
     build: () => buildHumanoid('thrall'),
     humanoid: true, temporary: true,
   },
   // ---- the Sunken Crypt ----
   revenant: {
-    name: 'Crypt Revenant', level: 65, hp: 6000, dmgMin: 280, dmgMax: 380, xp: 800,
+    name: 'Crypt Revenant', level: 41, hp: 6000, dmgMin: 120, dmgMax: 170, xp: 280,
     speed: 5.8, aggroRadius: 8, attackRange: 2.4, gold: [60, 120], respawn: 600, wanderR: 1.5,
     build: () => buildHumanoid('revenant'),
     humanoid: true,
   },
   ossus: {
-    name: 'Gravelord Ossus', level: 80, hp: 80000, dmgMin: 380, dmgMax: 480, xp: 25000,
+    name: 'Gravelord Ossus', level: 49, hp: 55000, dmgMin: 330, dmgMax: 430, xp: 1100,
     speed: 4.4, aggroRadius: 15, attackRange: 3.4, gold: [3000, 4500], respawn: 240, wanderR: 2, leash: 80,
     build: () => { const g = buildHumanoid('gravelord'); g.scale.setScalar(2.0); return g; },
     humanoid: true, elite: true,
@@ -92,7 +92,7 @@ const ENEMY_TYPES = {
     summons: { at: [0.6, 0.3], kind: 'boneguard', count: 2 },
   },
   vargoth: {
-    name: 'Vargoth the Undying', level: 90, hp: 140000, dmgMin: 450, dmgMax: 580, xp: 50000,
+    name: 'Vargoth the Undying', level: 55, hp: 85000, dmgMin: 400, dmgMax: 500, xp: 2100,
     speed: 4.6, aggroRadius: 16, attackRange: 3.6, gold: [8000, 12000], respawn: 300, wanderR: 2, leash: 80,
     build: () => { const g = buildHumanoid('undying'); g.scale.setScalar(2.2); return g; },
     humanoid: true, elite: true,
@@ -113,10 +113,83 @@ const ENEMY_TYPES = {
     summons: { at: [0.75, 0.5, 0.25], kind: 'boneguard', count: 2 },
   },
   boneguard: {
-    name: 'Boneguard', level: 75, hp: 8000, dmgMin: 300, dmgMax: 400, xp: 1200,
+    name: 'Boneguard', level: 47, hp: 8000, dmgMin: 200, dmgMax: 280, xp: 320,
     speed: 5.8, aggroRadius: 50, attackRange: 2.4, gold: [80, 150],
     build: () => buildHumanoid('boneguard'),
     humanoid: true, temporary: true,
+  },
+
+  // ===== The Ashen Highlands (level 56–75) =====
+  cinderwraith: {
+    name: 'Cinder Wraith', level: 56, hp: 4900, dmgMin: 0, dmgMax: 0, xp: 541,
+    speed: 3.4, aggroRadius: 14, attackRange: 16, gold: [70, 130], respawn: 30,
+    leash: 36, wanderR: 1.5,    // small: aggro is LOS-less, so westmost wander must clear ZONE_ENTER
+    build: () => buildHumanoid('wraith'),
+    humanoid: true,
+    ranged: true, boltDmgMin: 297, boltDmgMax: 371, boltColor: 0xff6020, boltSpeed: 18,
+    // dmgMin/dmgMax 0 because all damage is the ranged bolt
+  },
+  ashhound: {
+    name: 'Ash Hound', level: 60, hp: 3800, dmgMin: 219, dmgMax: 273, xp: 627,
+    speed: 7.4, aggroRadius: 13, attackRange: 2.0, gold: [50, 100], respawn: 25,
+    leash: 30, wanderR: 3,      // small: aggro is LOS-less, so westmost wander must clear ZONE_ENTER
+    build: () => buildWolf(),                  // beast: faces +X via animateBeast
+  },
+  obsidiangolem: {
+    name: 'Obsidian Golem', level: 66, hp: 8900, dmgMin: 349, dmgMax: 435, xp: 770,
+    speed: 2.6, aggroRadius: 9, attackRange: 3.2, gold: [180, 320], respawn: 60,
+    leash: 26, wanderR: 2, armor: 48,          // flat per-hit damage reduction (≈20% of an at-level player hit)
+    build: () => { const g = buildHumanoid('golem'); g.scale.setScalar(1.7); return g; },
+    humanoid: true,
+  },
+
+  // ---- elite sub-area mini-boss ----
+  emberlord: {
+    // melee dps tuned to the sustain floor for L70 (base maxHp 2880): the
+    // unavoidable auto-attack stream sits at ≈0.08×maxHp = 230/s. At 2.2s
+    // elite interval that's avg ≈507 → 451/563. Meteor mechanic stays lethal.
+    name: 'Emberlord Vssaric', level: 70, hp: 30500, dmgMin: 451, dmgMax: 563, xp: 2332,
+    speed: 4.2, aggroRadius: 15, attackRange: 3.6, gold: [4000, 6000],
+    respawn: 240, leash: 60, wanderR: 2, armor: 44,
+    build: () => { const g = buildHumanoid('undying'); g.scale.setScalar(2.0); return g; },
+    humanoid: true, elite: true,
+    mechanics: [{
+      kind: 'zone', interval: 7, telegraph: 1.5, radius: 6, dmg: 1152,
+      center: 'player', avoid: 'move', color: 0xff5020,
+      warn: 'hurls a meteor — MOVE!', dodgeMsg: 'The meteor cracks empty stone.',
+    }],
+    summons: { at: [0.6, 0.3], kind: 'ashhound', count: 3 },
+  },
+
+  // ---- world boss ----
+  pyraxis: {
+    // melee dps tuned to the sustain floor for L75 (base maxHp 3080): the
+    // UNAVOIDABLE auto-attack stream must sit at ≈0.08×maxHp = 246/s, not lie
+    // about its level. At 2.2s elite interval that's avg ≈542 → 482/602.
+    // The three mechanics (slam/breath/firepatch) carry the near-lethal burst.
+    name: 'Pyraxis, the Cinder Wyrm', level: 75, hp: 118600, dmgMin: 482, dmgMax: 602, xp: 4062,
+    speed: 4.6, aggroRadius: 18, attackRange: 5.0, gold: [15000, 22000],
+    respawn: 300, leash: 90, wanderR: 2, armor: 47,
+    build: () => { const g = buildDragon(); g.scale.setScalar(1.25); return g; },  // beast: faces +X
+    elite: true,
+    mechanics: [
+      { // (1) SLAM — jump
+        kind: 'slam', interval: 10, telegraph: 1.5, radius: 10, dmg: 1294,
+        center: 'boss', avoid: 'jump', color: 0xffaa30,
+        warn: 'rears and crashes down — JUMP!', dodgeMsg: 'You leap the shockwave!',
+      },
+      { // (2) ZONE — move (breath on player)
+        kind: 'zone', interval: 8, telegraph: 1.5, radius: 7, dmg: 1294,
+        center: 'player', avoid: 'move', color: 0xff5020,
+        warn: 'inhales a gout of cinders — MOVE!', dodgeMsg: 'The cinders scorch bare rock.',
+      },
+      { // (3) FIREPATCH — NEW persistent stack zone (lingers 20s, shrinks arena)
+        kind: 'firepatch', interval: 12, telegraph: 1.4, radius: 4.5, dmg: 700,
+        lingerDmg: 300, linger: 20, center: 'player', avoid: 'move', color: 0xff3a10,
+        warn: 'spits clinging fire — MOVE, and stay out!', dodgeMsg: 'The fire takes root on empty ground.',
+      },
+    ],
+    summons: { at: [0.75, 0.5, 0.25], kind: 'ashhound', count: 3 },
   },
 };
 
@@ -124,6 +197,11 @@ export const TRIAL_SITES = {
   korgrim: { x: 0, z: -125 },
   vexnar: { x: 125, z: 55 },
   morgrath: { x: -105, z: 95 },
+};
+
+export const HIGHLANDS_SITES = {
+  emberlord: { x: 178, z: -40 },   // elite sub-area, north basin
+  pyraxis:   { x: 196, z: 40 },    // world-boss arena, far east shelf
 };
 
 function makeRng(seed) {
@@ -197,12 +275,7 @@ export function spawnEnemies(scene) {
   enemies.push(king);
   scene.add(king.group);
 
-  // the Trials wait at the valley's edges
-  for (const [kind, site] of Object.entries(TRIAL_SITES)) {
-    const e = makeEnemy(kind, site.x, site.z);
-    enemies.push(e);
-    scene.add(e.group);
-  }
+  // (trial bosses spawn lazily via spawnTrialBoss once the quest chain reaches them)
 
   // the Sunken Crypt: revenant packs, the Gravelord, and the Undying on his throne
   const cryptSpawns = [
@@ -225,7 +298,43 @@ export function spawnEnemies(scene) {
   enemies.push(ossus, vargoth);
   scene.add(ossus.group, vargoth.group);
 
+  // ---- the Ashen Highlands: wraith/hound/golem packs, the Emberlord, Pyraxis ----
+  // Aggro is LOS-less pure distance AND wander offsets home by up to wanderR, so the
+  // true westernmost pull point is (spawnX − wanderR − aggroRadius). Every westmost
+  // spawn below keeps that ≥ ZONE_ENTER(158) with margin, so a player standing inside
+  // the arch (before the zone even flips) can never get yanked into a highland mob:
+  //   cinderwraith  180 − 1.5 − 14 = 164.5 ≥ 158  ✓
+  //   ashhound      180 − 3   − 13 = 164   ≥ 158  ✓
+  //   obsidiangolem 184 − 2   − 9  = 173   ≥ 158  ✓
+  const highlandSpawns = [
+    // Cinder Wraith casters (ranged) — spread so they kite singly, not bunched
+    ['cinderwraith', 180, 8], ['cinderwraith', 186, -14], ['cinderwraith', 191, 20],
+    // Ash Hound packs (fast) — small clusters
+    ['ashhound', 180, -28], ['ashhound', 182, -26], ['ashhound', 184, -30],
+    ['ashhound', 188, 64],  ['ashhound', 190, 66],  ['ashhound', 186, 62],
+    // Obsidian Golems (slow tanks) — solo sentries
+    ['obsidiangolem', 184, 0], ['obsidiangolem', 192, -8], ['obsidiangolem', 197, 14],
+  ];
+  for (const [kind, x, z] of highlandSpawns) {
+    const e = makeEnemy(kind, x, z);
+    enemies.push(e);
+    scene.add(e.group);
+  }
+  const emberlord = makeEnemy('emberlord', HIGHLANDS_SITES.emberlord.x, HIGHLANDS_SITES.emberlord.z);
+  const pyraxis = makeEnemy('pyraxis', HIGHLANDS_SITES.pyraxis.x, HIGHLANDS_SITES.pyraxis.z);
+  enemies.push(emberlord, pyraxis);
+  scene.add(emberlord.group, pyraxis.group);
+
   return enemies;
+}
+
+// trial bosses materialize only once the quest chain reaches them
+export function spawnTrialBoss(game, kind) {
+  const site = TRIAL_SITES[kind];
+  const e = makeEnemy(kind, site.x, site.z);
+  game.enemies.push(e);
+  game.scene.add(e.group);
+  return e;
 }
 
 export function removeEnemy(game, e) {
@@ -250,6 +359,11 @@ function summonThralls(game, boss) {
       boss.group.position.x + Math.cos(a) * 4,
       boss.group.position.z + Math.sin(a) * 4
     );
+    // Summoned minions are a ONE-TIME pack: mark the instance temporary so it is
+    // removed on death and never respawns — even when the summon kind (e.g.
+    // 'ashhound') is otherwise a normal respawning highland mob. (thrall/boneguard
+    // carry temporary on the TYPE; this also covers reused-mob summons.)
+    e.temporary = true;
     e.state = 'chase';
     game.enemies.push(e);
     game.scene.add(e.group);
@@ -272,7 +386,111 @@ export function spawnNpc(scene) {
   };
 }
 
+// Emberwarden Kaska guards the mountain pass, just west of the gate arch.
+export function spawnGateNpc(scene) {
+  const group = buildHumanoid('kaska');
+  const x = HIGHLANDS.GATE_X - 5, z = 0;        // in the low pass corridor (z∈[-12,12]),
+                                                // not on the z² pass wall to the north
+  placeOnGround(group, x, z);
+  group.rotation.y = -Math.PI / 2;              // face back down the path toward the player
+  group.castShadow = true;
+  return {
+    name: 'Emberwarden Kaska',
+    group,
+    anim: { moving: false, speed: 1, attackT: -1, dead: false },
+  };
+}
+
 const v1 = new THREE.Vector3();
+
+// ---- enemy projectiles (Cinder Wraith etc.) ----
+// Inverts the player projectile pattern: launched from a caster, homes the
+// player's torso, routes damage through player.takeDamage (NOT applyDamage,
+// which is for enemy-directed damage).
+const enemyBolts = [];
+
+function fireEnemyBolt(game, e) {
+  const t = e.type;
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 6, 6),
+    new THREE.MeshBasicMaterial({ color: t.boltColor })
+  );
+  mesh.position.copy(e.group.position);
+  mesh.position.y += 1.4;
+  game.scene.add(mesh);
+  game.audio.bolt();
+  const dmg = Math.round(t.boltDmgMin + Math.random() * (t.boltDmgMax - t.boltDmgMin));
+  enemyBolts.push({ mesh, source: e, dmg, speed: t.boltSpeed || 18 });
+}
+
+function updateEnemyBolts(game, dt) {
+  const p = game.player;
+  for (let i = enemyBolts.length - 1; i >= 0; i--) {
+    const b = enemyBolts[i];
+    v1.copy(p.group.position); v1.y += 1.1;
+    const d = b.mesh.position.distanceTo(v1);
+    if (d < 0.7 || !p.alive) {
+      if (p.alive && d < 0.9) p.takeDamage(game, b.dmg, b.source);
+      game.scene.remove(b.mesh);
+      b.mesh.geometry.dispose();
+      b.mesh.material.dispose();
+      enemyBolts.splice(i, 1);
+      continue;
+    }
+    v1.sub(b.mesh.position).normalize().multiplyScalar(b.speed * dt);
+    b.mesh.position.add(v1);
+  }
+}
+
+// ---- persistent fire patches (Pyraxis firepatch mechanic) ----
+// A patch lingers `linger` seconds after its telegraph resolves, damaging
+// anyone inside on a 1s tick and visibly shrinking as it burns out (the
+// "arena shrinks" cue). Telegraph UX (ring/fill/banner/sfx) is the normal
+// 4-part one from castMechanic; this disc is a fifth, post-telegraph visual.
+const firePatches = [];
+
+function spawnFirePatch(game, tg) {
+  const disc = new THREE.Mesh(
+    new THREE.CircleGeometry(tg.mech.radius, 32),
+    new THREE.MeshBasicMaterial({
+      color: tg.mech.color, transparent: true, opacity: 0.55,
+      side: THREE.DoubleSide, depthWrite: false,
+    })
+  );
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.set(tg.x, heightAt(tg.x, tg.z) + 0.06, tg.z);
+  game.scene.add(disc);
+  firePatches.push({
+    x: tg.x, z: tg.z, r: tg.mech.radius, disc,
+    life: tg.mech.linger, tickT: 0, dmg: tg.mech.lingerDmg, source: tg.source,
+  });
+}
+
+function updateFirePatches(game, dt) {
+  const p = game.player;
+  for (let i = firePatches.length - 1; i >= 0; i--) {
+    const fp = firePatches[i];
+    fp.life -= dt;
+    const frac = Math.max(0, fp.life / 20);
+    fp.disc.material.opacity = 0.30 + 0.25 * (0.5 + 0.5 * Math.sin(game._elapsed * 6 + fp.x));
+    fp.disc.scale.setScalar(0.6 + 0.4 * frac);                 // shrinks toward 0.6× as it dies
+    if (fp.life <= 0) {
+      game.scene.remove(fp.disc);
+      fp.disc.geometry.dispose();
+      fp.disc.material.dispose();
+      firePatches.splice(i, 1);
+      continue;
+    }
+    if (!p.alive) continue;
+    fp.tickT -= dt;
+    if (fp.tickT <= 0) {
+      fp.tickT = 1.0;                                          // 1s damage tick
+      const eff = fp.r * (0.6 + 0.4 * frac);                  // match the shrunk visual
+      const dist = Math.hypot(p.group.position.x - fp.x, p.group.position.z - fp.z);
+      if (dist < eff) p.takeDamage(game, fp.dmg, fp.source);
+    }
+  }
+}
 
 // ---- telegraphed boss mechanics ----
 const telegraphs = [];
@@ -319,6 +537,9 @@ function updateTelegraphs(game, dt) {
     game.fx.burst(new THREE.Vector3(tg.x, heightAt(tg.x, tg.z), tg.z), tg.mech.color, 32);
     game.audio.bolt();
 
+    // firepatch: drop a lingering hazard disc where the telegraph resolved
+    if (tg.mech.kind === 'firepatch') spawnFirePatch(game, tg);
+
     const p = game.player;
     if (!p.alive) continue;
     const dist = Math.hypot(p.group.position.x - tg.x, p.group.position.z - tg.z);
@@ -358,6 +579,7 @@ export function updateEnemies(game, dt, elapsed) {
   const { player } = game;
   const pPos = player.group.position;
   const toRemove = [];
+  game._elapsed = elapsed;     // shared clock for fire-patch pulsing
 
   for (const e of game.enemies) {
     const t = e.type;
@@ -457,7 +679,8 @@ export function updateEnemies(game, dt, elapsed) {
         if (e.attackCd <= 0) {
           e.attackCd = e.elite ? 2.2 : 1.8;
           e.anim.attackT = 0;
-          e.pendingHit = 0.28;
+          if (t.ranged) fireEnemyBolt(game, e);   // lob a bolt instead of a melee swing
+          else e.pendingHit = 0.28;
         }
         break;
       }
@@ -512,6 +735,8 @@ export function updateEnemies(game, dt, elapsed) {
 
   for (const e of toRemove) removeEnemy(game, e);
   updateTelegraphs(game, dt);
+  updateEnemyBolts(game, dt);
+  updateFirePatches(game, dt);
 }
 
 // called by combat when an enemy takes damage

@@ -1,6 +1,10 @@
 import * as THREE from 'three';
-import { heightAt } from './noise.js';
+import { heightAt, HIGHLANDS } from './noise.js';
 import { buildHumanoid, animateHumanoid } from './characters.js';
+import { totalEquippedStats } from './items.js';
+import { spentTotal, dmgMult, critAdd, hpMult, healRecvMult,
+         speedMult, potionMult, potionCdReduction, activeCapstones,
+         TALENT_UNLOCK_LEVEL } from './talents.js';
 
 export const CLASSES = {
   warrior: {
@@ -45,7 +49,9 @@ export const CLASSES = {
   },
 };
 
-export function xpForLevel(level) { return level * 120; }
+// Steep curve (the "level squish"): chapter 1 paces like before, but the top
+// compresses — a full first clear lands in the mid-60s instead of 118.
+export function xpForLevel(level) { return Math.round(100 + 0.5 * Math.pow(level, 2.2)); }
 
 // Barnaby's wares — the gold sink. Training prices escalate forever.
 export const SHOP = [
@@ -58,22 +64,22 @@ export const SHOP = [
   },
   {
     id: 'whet', name: 'Whetstone Training', icon: '⚒',
-    desc: '+3 weapon damage, permanently.',
-    price: (p) => Math.round(400 * Math.pow(1.6, p.trainDmg)),
-    owned: (p) => `+${p.trainDmg * 3} damage so far`,
+    desc: '+5 weapon damage, permanently.',
+    price: (p) => Math.round(500 * Math.pow(1.5, p.trainDmg)),
+    owned: (p) => `+${p.trainDmg * 5} damage so far`,
     buy: (p) => { p.trainDmg++; },
   },
   {
     id: 'vit', name: 'Vitality Training', icon: '♥',
-    desc: '+60 maximum health, permanently.',
-    price: (p) => Math.round(400 * Math.pow(1.6, p.trainHp)),
-    owned: (p) => `+${p.trainHp * 60} health so far`,
+    desc: '+80 maximum health, permanently.',
+    price: (p) => Math.round(500 * Math.pow(1.5, p.trainHp)),
+    owned: (p) => `+${p.trainHp * 80} health so far`,
     buy: (p) => { p.trainHp++; p.recalcStats(); },
   },
   {
     id: 'crit', name: 'Lucky Talisman', icon: '✧',
     desc: '+3% critical strike chance, permanently.',
-    price: (p) => Math.round(800 * Math.pow(1.6, p.trainCrit)),
+    price: (p) => Math.round(800 * Math.pow(1.5, p.trainCrit)),
     owned: (p) => `${Math.round((0.12 + p.trainCrit * 0.03) * 100)}% crit now`,
     buy: (p) => { p.trainCrit++; },
   },
@@ -84,6 +90,14 @@ export const SHOP = [
     soldOut: (p) => p.boots,
     owned: (p) => (p.boots ? 'worn' : ''),
     buy: (p) => { p.boots = true; p.recalcStats(); },
+  },
+  {
+    id: 'respec', name: 'Tome of Unlearning', icon: '📖',
+    desc: 'Forget all talents and reclaim every point. Price scales with what you have spent.',
+    price: (p) => Math.max(0, p.talentSpent()) * 100,
+    owned: (p) => (p.talentSpent() ? `${p.talentSpent()} points spent` : 'nothing to unlearn'),
+    soldOut: (p) => p.talentSpent() === 0,          // disables the buy button at 0 spent
+    buy: (p) => { /* handled specially in ui.showShop — see §5e */ },
   },
 ];
 
@@ -111,6 +125,9 @@ export function createPlayer(classId, scene) {
     maxHp: 0, hp: 0, maxMp: 0, mp: 0,
     gold: 0, runes: 0, runeBonus: 0,
     potions: 0, potionCd: 0, trainDmg: 0, trainHp: 0, trainCrit: 0, boots: false,
+    inventory: [],            // Item[]
+    equipped: { weapon: null, armor: null, trinket: null },
+    talents: { onslaught: 0, bulwark: 0, pathfinder: 0 },   // points spent per branch
     alive: true,
     speed: 6.5,
     vy: 0, onGround: true,
@@ -119,6 +136,7 @@ export function createPlayer(classId, scene) {
     attackCd: 0, gcd: 0,
     cooldowns: {},
     casting: null,
+    stoneformT: 0,   // >0 = Stoneform active (damage reduction window)
     combatTimer: 0, // >0 means "in combat"
     cam: { yaw: 0, pitch: 0.42, dist: 10 },
 
@@ -133,18 +151,37 @@ export function createPlayer(classId, scene) {
       return this.secondary ? [...this.cls.skills, ...this.secondary.skills] : this.cls.skills;
     },
 
+    // equipped-gear contribution for one axis (dmg/hp/crit/speed/healPower)
+    gearStat(axis) {
+      return totalEquippedStats(this.equipped)[axis] || 0;
+    },
+
+    // ---------- talents (derived, never stored as `spent`) ----------
+    // total points spent across branches
+    talentSpent() { return spentTotal(this.talents); },
+    // points available to spend right now (retroactive, derived)
+    talentPoints() { return Math.max(0, this.level - (TALENT_UNLOCK_LEVEL - 1) - this.talentSpent()); },
+    // capstone actives currently unlocked (for the action bar)
+    capstones() { return activeCapstones(this.talents); },
+    // the full action-bar list: class skills (+secondary) then unlocked capstones
+    barSkills() { return [...this.allSkills(), ...this.capstones()]; },
+
     baseDamage() {
-      return Math.round((7 + this.level * 2.2) * this.effMod('dmgMod')) + this.runeBonus + this.trainDmg * 3;
+      return Math.round((7 + this.level * 3.5) * this.effMod('dmgMod') * dmgMult(this.talents))
+        + this.runeBonus + this.trainDmg * 5 + Math.round(this.gearStat('dmg'));
     },
 
     critChance() {
-      return 0.12 + this.trainCrit * 0.03;
+      return 0.12 + this.trainCrit * 0.03 + this.gearStat('crit') + critAdd(this.talents);
     },
 
     recalcStats() {
-      this.maxHp = Math.round((80 + this.level * 26) * this.effMod('hpMod')) + this.trainHp * 60;
-      this.maxMp = Math.round((50 + this.level * 13) * this.effMod('mpMod'));
-      this.speed = 6.5 * (this.boots ? 1.2 : 1);
+      this.maxHp = Math.round(
+        ((80 + this.level * 40) * this.effMod('hpMod') + this.trainHp * 80 + Math.round(this.gearStat('hp')))
+        * hpMult(this.talents)
+      );
+      this.maxMp = Math.round((50 + this.level * 16) * this.effMod('mpMod'));
+      this.speed = 6.5 * (this.boots ? 1.2 : 1) * (1 + this.gearStat('speed')) * speedMult(this.talents);
     },
 
     tryJump() {
@@ -159,9 +196,12 @@ export function createPlayer(classId, scene) {
       if (this.potions <= 0) { game.ui.log('You have no draughts left — Barnaby sells them.', 'log-sys'); return; }
       if (this.potionCd > 0) return;
       this.potions--;
-      this.potionCd = 12;
-      const hp = Math.round(this.maxHp * 0.35);
-      const mp = Math.round(this.maxMp * 0.25);
+      this.potionCd = Math.max(2, 12 - potionCdReduction(this.talents));
+      const potMul = potionMult(this.talents);            // Pathfinder Alchemy
+      const healRecv = healRecvMult(this.talents);        // Bulwark Mending
+      const hpw = 1 + this.gearStat('healPower');
+      const hp = Math.round(this.maxHp * 0.35 * hpw * potMul * healRecv);
+      const mp = Math.round(this.maxMp * 0.25 * potMul);  // mana gets Alchemy, not heal-received
       this.hp = Math.min(this.maxHp, this.hp + hp);
       this.mp = Math.min(this.maxMp, this.mp + mp);
       game.ui.floatText(this.group.position, `+${hp}`, 'heal');
@@ -169,6 +209,52 @@ export function createPlayer(classId, scene) {
       game.audio.heal();
       game.fx.burst(this.group.position, 0xff8ab0, 14);
       game.save?.();
+    },
+
+    // ---------- inventory & gear ----------
+    equip(game, item) {
+      // move item from bag into its slot; old equipped item returns to bag
+      const slot = item.slot;
+      const idx = this.inventory.indexOf(item);
+      if (idx < 0) return;
+      this.inventory.splice(idx, 1);
+      const prev = this.equipped[slot];
+      this.equipped[slot] = item;
+      if (prev) this.inventory.push(prev);
+      this.recalcStats();
+      this.hp = Math.min(this.hp, this.maxHp);   // clamp; do NOT refill (no free heal on swap)
+      game.audio.loot();
+      game.ui.log(`Equipped ${item.name}.`, rarityLogClass(item.rarity));
+      game.ui.refreshIdentity(game);             // updates char-frame tooltip summary
+      game.save?.();
+    },
+    unequip(game, slot) {
+      const item = this.equipped[slot];
+      if (!item) return;
+      this.equipped[slot] = null;
+      this.inventory.push(item);
+      this.recalcStats();
+      this.hp = Math.min(this.hp, this.maxHp);
+      game.ui.refreshIdentity(game);
+      game.save?.();
+    },
+    sellItem(game, item) {
+      const idx = this.inventory.indexOf(item);
+      if (idx < 0) return;
+      this.inventory.splice(idx, 1);
+      this.gold += item.value;
+      game.audio.loot();
+      game.ui.log(`Sold ${item.name} for ${item.value} gold.`, 'log-loot');
+      game.save?.();
+    },
+    addItem(game, item) {                        // called by combat on drop
+      if (this.inventory.length >= 24) {
+        // bag full — auto-sell so drops are never silently lost
+        this.gold += item.value;
+        game.ui.log(`Bag full — auto-sold ${item.name} for ${item.value}g.`, 'log-loot');
+        return;
+      }
+      this.inventory.push(item);
     },
 
     chooseSecondary(game, secondaryId, quiet = false) {
@@ -189,8 +275,38 @@ export function createPlayer(classId, scene) {
       game.save?.();
     },
 
+    // pour one point into a branch (fill order lives in talents.js math)
+    spendTalent(game, branch) {
+      if (this.talentPoints() <= 0) return false;
+      if (!(branch in this.talents)) return false;
+      if (this.talents[branch] >= 15) { game.ui.log('That path is fully walked.', 'log-sys'); return false; }
+      this.talents[branch]++;
+      this.recalcStats();
+      this.hp = Math.min(this.hp, this.maxHp);     // Bulwark grows the pool; do NOT free-heal the difference
+      game.audio.levelup();
+      game.fx.burst(this.group.position, 0xffd76e, 14);
+      game.ui.buildActionBar(game, game.onCast);    // a capstone may have just unlocked
+      game.ui.refreshTalentBadge(game);
+      game.save?.();
+      return true;
+    },
+
+    respecTalents(game) {
+      this.talents = { onslaught: 0, bulwark: 0, pathfinder: 0 };
+      this.recalcStats();
+      this.hp = Math.min(this.hp, this.maxHp);
+      this.stoneformT = 0;
+      // drop any capstone cooldowns so a respec doesn't leave ghost CDs
+      for (const id of ['cap_execute', 'cap_stoneform', 'cap_dash']) delete this.cooldowns[id];
+      game.ui.buildActionBar(game, game.onCast);
+      game.ui.refreshTalentBadge(game);
+      game.ui.log('Your talents unravel. Choose your path anew.', 'log-quest');
+      game.save?.();
+    },
+
     takeDamage(game, dmg, source) {
       if (!this.alive) return;
+      if (this.stoneformT > 0) dmg = Math.max(1, Math.round(dmg * 0.5));   // Stoneform: 50% less
       this.hp -= dmg;
       this.combatTimer = 5;
       game.ui.floatText(this.group.position, `-${dmg}`, 'incoming');
@@ -244,7 +360,13 @@ export function createPlayer(classId, scene) {
           game.ui.log('A second calling stirs within you…', 'log-quest');
           game.ui.showSecondaryChoice(game);
         }
+        // talent nudge: a new point is waiting
+        if (this.level >= TALENT_UNLOCK_LEVEL) {
+          game.ui.log(`A talent point awaits — press T to spend it.`, 'log-quest');
+          game.ui.nudgeTalentBadge();
+        }
       }
+      game.ui.refreshTalentBadge?.(game);
       game.save?.();
     },
 
@@ -260,6 +382,9 @@ export function createPlayer(classId, scene) {
   player.mp = player.maxMp;
   return player;
 }
+
+// rarity -> combat-log CSS class (styled in styles.css)
+function rarityLogClass(rarity) { return 'log-loot-' + rarity; }
 
 const moveDir = new THREE.Vector3();
 
@@ -277,10 +402,22 @@ export function updatePlayer(game, dt, elapsed) {
   player.gcd = Math.max(0, player.gcd - dt);
   player.attackCd = Math.max(0, player.attackCd - dt);
   player.potionCd = Math.max(0, player.potionCd - dt);
+  player.stoneformT = Math.max(0, player.stoneformT - dt);
   for (const k in player.cooldowns) player.cooldowns[k] = Math.max(0, player.cooldowns[k] - dt);
 
   // --- movement ---
   if (player.alive) {
+    // run-steering (both buttons or W+LMB): cursor offset from screen center is a
+    // continuous turn rate, so holding the cursor left walks a full circle without
+    // ever dragging the mouse further
+    if (input.mouseForward || (input.lmb && input.keys.has('KeyW'))) {
+      const half = window.innerWidth / 2;
+      const raw = (input.cursorX - half) / half;
+      const dead = 0.06; // centered cursor = run straight
+      const full = 0.6;  // full turn rate well before the screen edge
+      const off = THREE.MathUtils.clamp((raw - Math.sign(raw) * dead) / (full - dead), -1, 1);
+      if (Math.abs(raw) > dead) player.cam.yaw -= off * 3.0 * dt;
+    }
     const yaw = player.cam.yaw;
     moveDir.set(0, 0, 0);
     if (input.keys.has('KeyW') || input.mouseForward) { moveDir.x -= Math.sin(yaw); moveDir.z -= Math.cos(yaw); }
@@ -304,10 +441,20 @@ export function updatePlayer(game, dt, elapsed) {
         g.position.x = THREE.MathUtils.clamp(nx, 252, 358);
         g.position.z = THREE.MathUtils.clamp(nz, -58, 58);
       } else {
-        g.position.x = THREE.MathUtils.clamp(nx, -150, 150);
+        // one continuous overworld+highlands box: west edge -150, east edge EAST_EDGE
+        g.position.x = THREE.MathUtils.clamp(nx, -150, HIGHLANDS.EAST_EDGE);
         g.position.z = THREE.MathUtils.clamp(nz, -150, 150);
       }
       g.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+    }
+
+    // --- biome zone follows the player across the pass (hysteresis avoids flicker) ---
+    if (game.zone !== 'crypt') {
+      if (game.zone !== 'highlands' && g.position.x > HIGHLANDS.ZONE_ENTER) {
+        game.setZone('highlands');
+      } else if (game.zone === 'highlands' && g.position.x < HIGHLANDS.ZONE_EXIT) {
+        game.setZone('world');
+      }
     }
 
     // crypt walls are solid (for you, at least)

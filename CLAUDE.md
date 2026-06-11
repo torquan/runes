@@ -59,12 +59,17 @@ player, ui, fx, quests, audio, input, classes, zone, save() }`.
 - **Mechanics UX**: every telegraph = ground ring + filling disc +
   center-screen JUMP!/MOVE! banner + distinct sfx (`warnJump`/`warnMove`).
   Keep all four for anything new.
-- **The sustain-math lesson** (why Vargoth is "level 90"): player heals are
-  **% of maxHp**, boss melee is **flat**. A boss is only sustainable when
-  ≈17% of maxHp/sec ≥ boss sustained dps, so boss melee dps silently sets a
-  hard level floor: `required maxHp ≈ sustained_dps / 0.17`. Tune (or label)
-  boss levels from that formula, not vibes. Mechanic burst (the dodgeable
-  hits) can and should stay near-lethal at level.
+- **The balance model** (post-rebalance; derive everything from it):
+  player at level L: `maxHp = 80+40L`, `maxMp = 50+16L`, `dmg = 7+3.5L`,
+  DPS ≈ `2.2 × dmg`, heal throughput ≈ `10% of maxHp / sec`.
+  XP: `xpForLevel(L) = 100 + 0.5·L^2.2`. Bosses: sustained dps ≈
+  `0.08 × at-level maxHp` (sustain floor: `required maxHp ≈ dps / 0.10`),
+  hp ≈ `TTK × at-level player DPS` (elite 30–60s, trial 90–150s, capstone
+  ~200s), mechanic burst ≈ 35–45% of at-level maxHp (dodgeable, near-lethal).
+  Kill XP ≈ levelCost × (3% trash / 15% crypt trash / 40% trial / 60%
+  capstone); elites pay **20% XP on repeat kills** (`game.slain`, persisted).
+  Level band: chapter 1 → ~12, trials 25/30/37, crypt 41–55, Ashen Highlands
+  55–75 (post-cap arc), cap = Pyraxis 75.
 - **Difficulty philosophy (user's explicit stance)**: do **not** make content
   easier; fix jank (wall-aggro, leashes, range lies) instead. When the two
   conflict, ask.
@@ -73,10 +78,11 @@ player, ui, fx, quests, audio, input, classes, zone, save() }`.
   quest statuses). Bump `v` and default-fill new fields on load when
   extending; keep old versions loadable. `window.__veteran('<class>')` seeds
   a level-10 post-chapter-1 save (console helper).
-- **Zones**: `game.zone` is `'world' | 'crypt'`; `setZone()` in `main.js`
-  swaps fog/sky/lights; player bounds + wall collision are zone-gated in
-  `player.js`. The crypt is a far-away pocket (x≈250–360), NOT an instance —
-  same scene, same enemy list.
+- **Zones**: `game.zone` is `'world' | 'crypt' | 'highlands'`; `setZone()` in
+  `main.js` swaps fog/sky/lights (highlands crushes meadow lighting for the
+  lava lights); player bounds + wall collision are zone-gated in `player.js`.
+  The crypt is a far-away pocket (x≈250–360), NOT an instance — same scene,
+  same enemy list. The Ashen Highlands is a far world shelf (x≈178–205).
 - **Quests**: strictly sequential array in `quests.js` (`trial: true` entries
   don't gate the bounty). The repeatable bounty scales with player level.
 - **HTML safety note**: `innerHTML` is used with developer-authored strings

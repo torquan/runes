@@ -1,5 +1,8 @@
 import * as THREE from 'three';
+import { heightAt, HIGHLANDS } from './noise.js';
 import { aggroEnemy, killEnemy } from './entities.js';
+import { rollDrops, rarityColor } from './items.js';
+import { gcdValue, healRecvMult } from './talents.js';
 
 // ---------- particle bursts ----------
 export function createFx(scene) {
@@ -75,11 +78,13 @@ export function clickTarget(game, clientX, clientY) {
     const enemy = alive[groups.indexOf(obj)];
     if (enemy) { setTarget(game, enemy); return true; }
   }
-  // clicking the NPC opens dialog when close enough
-  const npcHits = raycaster.intersectObject(game.npc.group, true);
-  if (npcHits.length && game.player.group.position.distanceTo(game.npc.group.position) < 6) {
-    game.quests.openDialog(game);
-    return true;
+  // clicking an NPC opens its dialog when close enough
+  for (const n of game.npcs) {
+    const hits = raycaster.intersectObject(n.group, true);
+    if (hits.length && game.player.group.position.distanceTo(n.group.position) < 6) {
+      (n === game.npc ? game.quests : game.highlandQuests).openDialog(game);
+      return true;
+    }
   }
   return false;
 }
@@ -102,6 +107,11 @@ function setTarget(game, enemy) {
 // ---------- damage ----------
 function applyDamage(game, enemy, dmg, crit, skillName) {
   if (!enemy.alive) return;
+  // flat armor: a throughput tax (e.g. golems), never a wall (min 1). Applied
+  // after the crit roll so the shown number matches HP lost; projectiles & AoE
+  // inherit it for free since they all funnel through here.
+  const armor = enemy.type.armor || 0;
+  if (armor) dmg = Math.max(1, dmg - armor);
   enemy.hp -= dmg;
   game.player.combatTimer = 5;
   aggroEnemy(enemy);
@@ -125,7 +135,17 @@ function onKill(game, enemy) {
   game.ui.log(`${enemy.name} dies.`, 'log-sys');
   if (game.player.target === enemy) game.player.target = null;
 
-  game.player.gainXp(game, enemy.type.xp);
+  // elites pay full XP once; repeat farm kills pay 20% (gold/loot unaffected)
+  let xp = enemy.type.xp;
+  if (enemy.elite) {
+    if (game.slain.has(enemy.kind)) {
+      xp = Math.round(xp * 0.2);
+      game.ui.log(`${enemy.name} yields little new experience.`, 'log-sys');
+    } else {
+      game.slain.add(enemy.kind);
+    }
+  }
+  game.player.gainXp(game, xp);
   const [gMin, gMax] = enemy.type.gold;
   game.player.gainGold(game, Math.round(gMin + Math.random() * (gMax - gMin)));
 
@@ -138,7 +158,21 @@ function onKill(game, enemy) {
     game.fx.burst(enemy.group.position, 0x8ad9ff, 16);
   }
 
+  // gear drops — rarity-colored log line + floating loot text + a burst
+  const drops = rollDrops(enemy);
+  for (const item of drops) {
+    game.player.addItem(game, item);
+    game.audio.loot();
+    game.ui.log(`${enemy.name} drops ${item.name}!`, 'log-loot-' + item.rarity);
+    game.ui.floatText(enemy.group.position, item.name, 'loot-' + item.rarity);
+    game.fx.burst(enemy.group.position, parseInt(rarityColor(item.rarity).slice(1), 16), 16);
+  }
+  if (drops.length) game.save?.();
+
+  // both chains see every kill; each ignores kinds it doesn't track and each
+  // bounty only counts its own zone's creatures (gated in quests.js).
   game.quests.onKill(game, enemy);
+  game.highlandQuests.onKill(game, enemy);
 }
 
 function rollDamage(player, mult) {
@@ -167,7 +201,7 @@ const v1 = new THREE.Vector3();
 export function castSkill(game, index) {
   const p = game.player;
   if (!p.alive || p.casting) return;
-  const skill = p.allSkills()[index];
+  const skill = p.barSkills()[index];
   if (!skill) return;
 
   if (p.gcd > 0 || (p.cooldowns[skill.id] || 0) > 0) return;
@@ -176,7 +210,8 @@ export function castSkill(game, index) {
     return;
   }
 
-  const needsTarget = skill.kind === 'damage' || (skill.kind === 'aoe' && skill.aoeCenter === 'target');
+  const needsTarget = skill.kind === 'damage' || skill.kind === 'execute'
+    || (skill.kind === 'aoe' && skill.aoeCenter === 'target');
   if (needsTarget) {
     const t = p.target;
     if (!t || !t.alive) { game.ui.log('You need a target.', 'log-sys'); return; }
@@ -202,12 +237,12 @@ function resolveSkill(game, skill) {
   const p = game.player;
   p.mp -= skill.mana;
   if (skill.cd > 0) p.cooldowns[skill.id] = skill.cd;
-  p.gcd = 1.0;
+  p.gcd = gcdValue(p.talents);
   p.anim.attackT = 0;
-  game.ui.pulseSlot(p.allSkills().indexOf(skill));
+  game.ui.pulseSlot(p.barSkills().indexOf(skill));
 
   if (skill.kind === 'heal') {
-    const amount = Math.round(p.maxHp * skill.healPct);
+    const amount = Math.round(p.maxHp * skill.healPct * (1 + p.gearStat('healPower')) * healRecvMult(p.talents));
     p.hp = Math.min(p.maxHp, p.hp + amount);
     game.ui.floatText(p.group.position, `+${amount}`, 'heal');
     game.ui.log(`${skill.name} restores ${amount} health.`, 'log-heal');
@@ -223,6 +258,49 @@ function resolveSkill(game, skill) {
     game.ui.log(`${skill.name} restores ${amount} mana.`, 'log-heal');
     game.audio.rune();
     game.fx.burst(p.group.position, 0xb08aff, 14);
+    return;
+  }
+
+  if (skill.kind === 'execute') {
+    const t = p.target;
+    if (!t || !t.alive) return;
+    if (t.hp / t.maxHp > skill.hpThreshold) {
+      game.ui.log(`${t.name} is too healthy to execute (needs <30% HP).`, 'log-sys');
+      // refund: undo the cost/cd we just paid so it doesn't waste the button
+      p.mp += skill.mana;
+      p.cooldowns[skill.id] = 0;
+      p.gcd = 0;
+      return;
+    }
+    const { dmg, crit } = rollDamage(p, skill.mult);
+    if (p.cls.ranged || skill.range > 5) fireProjectile(game, t, skill.color, dmg, crit, skill.name);
+    else applyDamage(game, t, dmg, crit, skill.name);
+    return;
+  }
+
+  if (skill.kind === 'stoneform') {
+    p.stoneformT = skill.duration;
+    game.ui.floatText(p.group.position, 'Stoneform!', 'heal');
+    game.ui.log('You harden into living stone — 50% damage reduction for 6s.', 'log-heal');
+    game.audio.rune();
+    game.fx.burst(p.group.position, 0x9ad0ff, 26);
+    return;
+  }
+
+  if (skill.kind === 'dash') {
+    const g = p.group;
+    const yaw = g.rotation.y;                       // humanoid faces +Z: forward = (sin yaw, cos yaw)
+    let nx = g.position.x + Math.sin(yaw) * skill.distance;
+    let nz = g.position.z + Math.cos(yaw) * skill.distance;
+    // respect zone bounds (mirror updatePlayer's clamps)
+    if (game.zone === 'crypt') { nx = THREE.MathUtils.clamp(nx, 252, 358); nz = THREE.MathUtils.clamp(nz, -58, 58); }
+    else { nx = THREE.MathUtils.clamp(nx, -150, HIGHLANDS.EAST_EDGE); nz = THREE.MathUtils.clamp(nz, -150, 150); }
+    g.position.x = nx; g.position.z = nz;
+    g.position.y = Math.max(g.position.y, heightAt(nx, nz));   // land on ground at destination
+    p.onGround = true; p.vy = 0;
+    game.ui.floatText(g.position, 'Dash!', 'heal');
+    game.audio.bolt();
+    game.fx.burst(g.position, 0x8aff9d, 22);
     return;
   }
 
@@ -260,8 +338,9 @@ function resolveSkill(game, skill) {
 
 function selfHeal(game, amount) {
   const p = game.player;
-  p.hp = Math.min(p.maxHp, p.hp + amount);
-  game.ui.floatText(p.group.position, `+${amount}`, 'heal');
+  const healed = Math.round(amount * healRecvMult(p.talents));   // Bulwark Mending applies to lifesteal too
+  p.hp = Math.min(p.maxHp, p.hp + healed);
+  game.ui.floatText(p.group.position, `+${healed}`, 'heal');
 }
 
 // ---------- per-frame ----------

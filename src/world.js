@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { fbm, heightAt, WORLD_SIZE } from './noise.js';
+import { fbm, heightAt, WORLD_SIZE, HIGHLANDS } from './noise.js';
 
 export { heightAt, WORLD_SIZE };
 
@@ -77,6 +77,11 @@ export function buildWorld(scene) {
   const grassB = new THREE.Color(0x4d8a35);
   const dirt = new THREE.Color(0x9a7a4a);
   const rock = new THREE.Color(0x8a8478);
+  // Ashen Highlands palette: cracked basalt + ember-warm dirt
+  const ashA = new THREE.Color(0x4a3a36);
+  const ashB = new THREE.Color(0x2e2422);
+  const basalt = new THREE.Color(0x1c1820);
+  const ember = new THREE.Color(0x7a2410);
   const c = new THREE.Color();
 
   for (let i = 0; i < pos.count; i++) {
@@ -95,6 +100,16 @@ export function buildWorld(scene) {
       (Math.abs(pathAngle + 2.2) < 0.085 && d < 100);
     if (onPath) c.copy(dirt).lerp(c, 0.25 + tint * 0.2);
     if (h > 9) c.lerp(rock, Math.min(1, (h - 9) / 7));
+    // ---- Ashen Highlands biome tint (blends in over the same band as heightAt) ----
+    if (x > HIGHLANDS.BLEND_LO) {
+      const bt = Math.min(1, (x - HIGHLANDS.BLEND_LO) / (HIGHLANDS.BLEND_HI - HIGHLANDS.BLEND_LO));
+      const ash = ashA.clone().lerp(ashB, tint);
+      if (h > 9) ash.lerp(basalt, Math.min(1, (h - 9) / 8));
+      // ember veins glow in the low cracks
+      const vein = fbm(x * 0.12 + 88, z * 0.12 + 5, 2);
+      if (vein > 0.62 && h < 9) ash.lerp(ember, (vein - 0.62) * 1.4);
+      c.lerp(ash, bt);
+    }
     colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
   }
   geo.computeVertexNormals();
@@ -309,8 +324,12 @@ export function buildWorld(scene) {
   // --- sentinel stone circles mark the trial arenas ---
   const stoneRingMat = new THREE.MeshLambertMaterial({ color: 0x5e5a52 });
   const runeMat = new THREE.MeshBasicMaterial({ color: 0x8ad9ff });
-  for (const site of TRIAL_SITES) {
+  const trialArenas = {};
+  const TRIAL_KEYS = ['korgrim', 'vexnar', 'morgrath'];
+  for (const [siteIdx, site] of TRIAL_SITES.entries()) {
     const arena = new THREE.Group();
+    arena.visible = false; // revealed when the quest chain reaches this trial
+    trialArenas[TRIAL_KEYS[siteIdx]] = arena;
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * Math.PI * 2;
       const px = site.x + Math.cos(a) * 13;
@@ -372,5 +391,5 @@ export function buildWorld(scene) {
     }
   }
 
-  return { terrain, update, sunLight: sun, hemi, sky };
+  return { terrain, update, sunLight: sun, hemi, sky, trialArenas };
 }

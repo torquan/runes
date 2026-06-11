@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { fbm, heightAt, WORLD_SIZE } from './noise.js';
-import { SHOP } from './player.js';
+import { fbm, heightAt, WORLD_SIZE, HIGHLANDS } from './noise.js';
+import { SHOP, xpForLevel } from './player.js';
+import { RARITY, rarityColor, statSummary, totalEquippedStats } from './items.js';
+import { BRANCHES, ranks, CAPSTONE_THRESHOLD } from './talents.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -26,7 +28,7 @@ export function createUi() {
 
   // pre-render the minimap terrain once
   const mapImg = document.createElement('canvas');
-  const MAP_RES = 200;
+  const MAP_RES = 260;   // bumped with WORLD_SIZE 420 to keep comparable minimap detail
   mapImg.width = mapImg.height = MAP_RES;
   {
     const mctx = mapImg.getContext('2d');
@@ -42,6 +44,13 @@ export function createUi() {
         if (h < -1) { r = 60; g = 100; b = 150; }
         const forest = fbm(wx * 0.03 + 51, wz * 0.03 + 17, 3);
         if (forest > 0.52 && h <= 9) { r *= 0.72; g *= 0.85; b *= 0.72; }
+        // the Ashen Highlands read as dark ash/ember in the east
+        if (wx > HIGHLANDS.BLEND_HI) {
+          const t = Math.min(1, (wx - HIGHLANDS.BLEND_HI) / 30);
+          r = r * (1 - t) + 120 * t;   // dark red-brown
+          g = g * (1 - t) + 40 * t;
+          b = b * (1 - t) + 30 * t;
+        }
         const i = (py * MAP_RES + px) * 4;
         img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
       }
@@ -82,12 +91,18 @@ export function createUi() {
       const bar = $('action-bar');
       bar.innerHTML = '';
       slots.length = 0;
-      game.player.allSkills().forEach((skill, i) => {
+      const primaryColor = game.player.cls.skills[0].color;   // class tint for capstones
+      const list = game.player.barSkills();
+      const capStart = game.player.allSkills().length;
+      list.forEach((skill, i) => {
+        const isCap = i >= capStart;
+        const color = isCap ? primaryColor : skill.color;
+        const keyLabel = i < 9 ? String(i + 1) : (i === 9 ? '0' : '-');  // keys 1-9,0,-
         const slot = document.createElement('div');
-        slot.className = 'skill-slot';
+        slot.className = 'skill-slot' + (isCap ? ' capstone' : '');
         slot.innerHTML = `
-          <span class="s-key">${i + 1}</span>
-          <span class="s-icon" style="color:${skill.color}">${skill.icon}</span>
+          <span class="s-key">${keyLabel}</span>
+          <span class="s-icon" style="color:${color}">${skill.icon}</span>
           <span class="s-cd"></span>
           <span class="s-tip"><b>${skill.name}</b>${skill.desc}<br><i>${skill.mana ? skill.mana + ' mana · ' : ''}${skill.cd ? skill.cd + 's cooldown' : 'no cooldown'}${skill.cast ? ' · ' + skill.cast + 's cast' : ''}</i></span>`;
         slot.addEventListener('mousedown', (e) => { e.stopPropagation(); onCast(i); });
@@ -115,14 +130,17 @@ export function createUi() {
       $('player-level').textContent = p.level;
 
       // xp + gold + runes + potions
-      const need = p.level * 120;
+      const need = xpForLevel(p.level);
       $('xp-fill').style.width = `${(p.xp / need) * 100}%`;
       $('xp-text').textContent = `${p.xp} / ${need} XP`;
       $('gold-text').textContent = p.gold;
       $('rune-count').textContent = p.runes;
       $('potion-count').textContent = p.potionCd > 0 ? Math.ceil(p.potionCd) : p.potions;
       $('potion-pouch').classList.toggle('on-cd', p.potionCd > 0);
-      $('zone-name').textContent = game.zone === 'crypt' ? 'The Sunken Crypt' : 'Howling Plains';
+      $('zone-name').textContent =
+        game.zone === 'crypt' ? 'The Sunken Crypt'
+        : game.zone === 'highlands' ? 'The Ashen Highlands'
+        : 'Howling Plains';
 
       // target frame
       const t = p.target;
@@ -192,18 +210,18 @@ export function createUi() {
         el.querySelector('.np-bang').textContent = '';
       }
 
-      // npc plate with quest marker
-      const npc = game.npc;
-      const el = this.plateFor(npc, 'friendly');
-      const pt = worldToScreen(game, npc.group.position, 2.4);
-      if (!pt) { el.style.display = 'none'; }
-      else {
+      // npc plates with quest markers (Barnaby + Emberwarden Kaska)
+      for (const n of game.npcs) {
+        const el = this.plateFor(n, 'friendly');
+        const pt = worldToScreen(game, n.group.position, 2.4);
+        if (!pt) { el.style.display = 'none'; continue; }
         el.style.display = '';
         el.style.left = `${pt.x}px`;
         el.style.top = `${pt.y}px`;
-        el.querySelector('.np-name').textContent = npc.name;
+        el.querySelector('.np-name').textContent = n.name;
         el.querySelector('.np-hp').style.display = 'none';
-        el.querySelector('.np-bang').textContent = game.quests.marker();
+        const qObj = (n === game.npc) ? game.quests : game.highlandQuests;
+        el.querySelector('.np-bang').textContent = qObj.marker();
       }
     },
 
@@ -237,14 +255,24 @@ export function createUi() {
     hideCastBar() { $('cast-bar').classList.add('hidden'); },
 
     // ---------- quest tracker ----------
-    refreshQuestTracker(quests) {
+    // Renders active/complete quests + bounties from BOTH chains. Called with
+    // any chain object (`this`); it reads all chains off the global game so a
+    // highland update never blanks Barnaby's tracked quests, and vice versa.
+    refreshQuestTracker() {
+      const game = window.__game;
+      const chains = [game.quests, game.highlandQuests].filter(Boolean);
       const wrap = $('quest-entries');
       wrap.innerHTML = '';
-      const visible = quests.quests.filter((q) => q.status === 'active' || q.status === 'complete');
-      const b = quests.bounty;
-      if (b.status === 'active' || b.status === 'complete') visible.push({ ...b, targetKind: 'any' });
+      const visible = [];
+      for (const ch of chains) {
+        for (const q of ch.quests) {
+          if (q.status === 'active' || q.status === 'complete') visible.push(q);
+        }
+        const b = ch.bounty;
+        if (b.status === 'active' || b.status === 'complete') visible.push({ ...b, targetKind: 'any' });
+      }
       if (!visible.length) {
-        const allDone = quests.quests.every((q) => q.status === 'done');
+        const allDone = game.quests.quests.every((q) => q.status === 'done');
         wrap.innerHTML = `<div class="quest-hint">${allDone ? 'Barnaby has a standing bounty for you.' : 'Speak with Pioneer Barnaby at the camp.'}</div>`;
         return;
       }
@@ -264,6 +292,9 @@ export function createUi() {
       $('player-class-icon').textContent = p.secondary
         ? `${p.cls.icon}${p.secondary.icon}`
         : p.cls.icon;
+      // equipped-gear summary on the char-frame hover (native title, like the pouches)
+      const t = totalEquippedStats(p.equipped);
+      $('player-frame').title = `${p.name}\nEquipped: ${statSummary(t) || 'nothing'}`;
     },
 
     // ---------- dual-class choice ----------
@@ -329,15 +360,19 @@ export function createUi() {
         const btn = document.createElement('button');
         btn.className = 'btn-ornate shop-buy';
         if (soldOut) {
-          btn.textContent = 'Owned';
+          btn.textContent = item.id === 'respec' ? 'Nothing to unlearn' : 'Owned';
           btn.disabled = true;
         } else {
           btn.textContent = `${price} g`;
-          btn.disabled = p.gold < price;
+          btn.disabled = p.gold < price || price <= 0;
           btn.addEventListener('click', () => {
-            if (p.gold < price) return;
+            if (p.gold < price || price <= 0) return;
             p.gold -= price;
-            item.buy(p);
+            if (item.id === 'respec') {
+              p.respecTalents(game);                 // resets talents, rebuilds bar
+            } else {
+              item.buy(p);
+            }
             game.audio.loot();
             this.log(`Purchased: ${item.name} (−${price} gold).`, 'log-loot');
             game.save?.();
@@ -351,6 +386,155 @@ export function createUi() {
     },
     hideShop() { $('shop-panel').classList.add('hidden'); },
     shopOpen() { return !$('shop-panel').classList.contains('hidden'); },
+
+    // ---------- inventory / gear ----------
+    showInventory(game) {
+      this._invTab = this._invTab || 'bag';
+      this.renderInventory(game);
+      $('inventory-panel').classList.remove('hidden');
+    },
+    hideInventory() { $('inventory-panel').classList.add('hidden'); },
+    inventoryOpen() { return !$('inventory-panel').classList.contains('hidden'); },
+    toggleInventory(game) { this.inventoryOpen() ? this.hideInventory() : this.showInventory(game); },
+
+    renderInventory(game) {
+      const p = game.player;
+      const selling = this._invTab === 'sell';
+      // hide any lingering tooltip (cells get recreated on equip/sell)
+      const oldTip = $('inv-tooltip'); if (oldTip) oldTip.style.display = 'none';
+      // tabs active state
+      $('inv-tab-bag').classList.toggle('active', !selling);
+      $('inv-tab-sell').classList.toggle('active', selling);
+
+      // equipped row
+      for (const slot of ['weapon', 'armor', 'trinket']) {
+        const cell = document.querySelector(`.equip-slot[data-slot="${slot}"] .eq-cell`);
+        const it = p.equipped[slot];
+        cell.innerHTML = it ? this._itemCellHTML(it) : '';
+        cell.className = 'eq-cell' + (it ? ` r-${it.rarity}` : '');
+        cell.onclick = it ? () => { p.unequip(game, slot); this.renderInventory(game); } : null;
+        if (it) this._attachTip(cell, it, p);
+        else { cell.onmouseenter = null; cell.onmouseleave = null; }
+      }
+
+      // stat summary line
+      const t = totalEquippedStats(p.equipped);
+      $('inv-stats-summary').innerHTML = `Equipped: ${statSummary(t) || 'nothing'}`;
+
+      // 24-slot grid
+      const grid = $('inv-grid');
+      grid.innerHTML = '';
+      for (let i = 0; i < 24; i++) {
+        const it = p.inventory[i];
+        const cell = document.createElement('div');
+        cell.className = 'inv-cell' + (it ? ` r-${it.rarity}` : '');
+        if (it) {
+          cell.innerHTML = this._itemCellHTML(it);
+          this._attachTip(cell, it, p);
+          cell.onclick = selling
+            ? () => { p.sellItem(game, it); this.renderInventory(game); this.update(game); }
+            : () => { p.equip(game, it); this.renderInventory(game); };
+        }
+        grid.appendChild(cell);
+      }
+    },
+
+    _itemCellHTML(it) {
+      const icon = { weapon: '⚔', armor: '⛨', trinket: '✦' }[it.slot];
+      return `<span class="inv-icon" style="color:${rarityColor(it.rarity)}">${icon}</span>`;
+    },
+
+    // JS-injected stat-compare tooltip (CSS-only can't compare vs equipped)
+    _attachTip(cell, item, player) {
+      cell.onmouseenter = () => {
+        const tip = $('inv-tooltip') || (() => {
+          const d = document.createElement('div');
+          d.id = 'inv-tooltip';
+          d.className = 'inv-tooltip';
+          document.getElementById('overlay').appendChild(d);
+          return d;
+        })();
+        const equipped = player.equipped[item.slot];
+        tip.innerHTML = this._tipHTML(item, equipped);
+        tip.style.display = 'block';
+        const r = cell.getBoundingClientRect();
+        tip.style.left = `${r.right + 8}px`;
+        tip.style.top = `${r.top}px`;
+      };
+      cell.onmouseleave = () => { const tip = $('inv-tooltip'); if (tip) tip.style.display = 'none'; };
+    },
+
+    // all strings here are developer-authored (item.name/flavor from items.js) — HTML-safe
+    _tipHTML(item, equipped) {
+      const color = rarityColor(item.rarity);
+      let body = `<div class="tip-name" style="color:${color}">${item.name}</div>`;
+      body += `<div class="tip-sub">${RARITY[item.rarity].label} ${item.slot}${item.unique ? ' · Unique' : ''}</div>`;
+      // stat lines with compare deltas vs currently equipped in that slot
+      const axes = ['dmg', 'hp', 'crit', 'speed', 'healPower'];
+      for (const ax of axes) {
+        const v = item.stats[ax] || 0; if (!v) continue;
+        const e = equipped ? (equipped.stats[ax] || 0) : 0;
+        const d = v - e;
+        const fmt = (n) => (ax === 'crit' || ax === 'speed' || ax === 'healPower') ? `${(n * 100).toFixed(1)}%` : `${Math.round(n)}`;
+        const cls = d > 0 ? 'stat-up' : d < 0 ? 'stat-down' : '';
+        body += `<div class="tip-stat">+${fmt(v)} ${ax}${equipped && d !== 0 ? ` <span class="${cls}">(${d > 0 ? '+' : ''}${fmt(d)})</span>` : ''}</div>`;
+      }
+      if (item.flavor) body += `<div class="tip-flavor">${item.flavor}</div>`;
+      if (item.value) body += `<div class="tip-value">Sells for ${item.value} g</div>`;
+      return body;
+    },
+
+    // ---------- talents ----------
+    showTalents(game) { this.renderTalents(game); $('talent-panel').classList.remove('hidden'); },
+    hideTalents() { $('talent-panel').classList.add('hidden'); },
+    talentOpen() { return !$('talent-panel').classList.contains('hidden'); },
+    toggleTalents(game) { this.talentOpen() ? this.hideTalents() : this.showTalents(game); },
+
+    refreshTalentBadge(game) {
+      const p = game.player;
+      const n = p.talentPoints();
+      const badge = $('talent-badge');
+      badge.classList.toggle('hidden', p.level < 10);   // hidden until L10
+      $('talent-count').textContent = n;
+      badge.classList.toggle('has-points', n > 0);
+      if (this.talentOpen()) this.renderTalents(game);  // keep open panel live
+    },
+    nudgeTalentBadge() {
+      const badge = $('talent-badge');
+      badge.classList.remove('nudge'); void badge.offsetHeight; badge.classList.add('nudge');
+    },
+
+    renderTalents(game) {
+      const p = game.player;
+      const t = p.talents;
+      $('talent-points-num').textContent = p.talentPoints();
+      const cols = $('talent-cols');
+      cols.innerHTML = '';
+      for (const branch of BRANCHES) {
+        const n = ranks(t, branch.id);
+        const col = document.createElement('div');
+        col.className = 'talent-col';
+        let html = `<h3 style="color:${branch.color}">${branch.name}</h3>
+          <div class="talent-flavor">${branch.flavor}</div>`;
+        for (const tier of branch.tiers) {
+          html += `<div class="talent-tier"><span class="t-label">${tier.label}</span> — ${tier.value(t)}</div>`;
+        }
+        if (branch.gcdNote) html += `<div class="talent-gcd">${branch.gcdNote(t)}</div>`;
+        const capUnlocked = n >= CAPSTONE_THRESHOLD;
+        html += `<div class="talent-cap ${capUnlocked ? 'unlocked' : 'locked'}">
+          ${branch.capstone.icon} ${branch.capstone.name}${capUnlocked ? '' : ` (unlocks at ${CAPSTONE_THRESHOLD})`}<br>
+          <small>${branch.capstone.desc}</small></div>`;
+        col.innerHTML = html;
+        const btn = document.createElement('button');
+        btn.className = 'btn-ornate talent-spend';
+        const full = n >= 15;
+        btn.textContent = full ? 'Path Maxed' : `Spend (${n}/15)`;
+        btn.disabled = full || p.talentPoints() <= 0;
+        btn.addEventListener('click', () => { p.spendTalent(game, branch.id); this.renderTalents(game); });
+        col.appendChild(btn);
+        cols.appendChild(col);
+      }
+    },
 
     // ---------- boss mechanic warning ----------
     mechWarning(kind) {
@@ -423,7 +607,7 @@ export function createUi() {
         if (!e.alive) continue;
         dot(e.group.position.x, e.group.position.z, e.elite ? '#ffd76e' : '#ff5a3c', e.elite ? 7 : 4);
       }
-      dot(game.npc.group.position.x, game.npc.group.position.z, '#ffe9b0', 5);
+      for (const n of game.npcs) dot(n.group.position.x, n.group.position.z, '#ffe9b0', 5);
 
       // player arrow oriented to facing
       ctx.save();
@@ -453,6 +637,9 @@ function targetLabel(kind) {
     bandit: 'Grimblade Bandits slain', banditking: 'Rurik the Red slain',
     korgrim: 'Korgrim toppled', vexnar: 'Vexnar grounded', morgrath: 'The Pale King unkinged',
     ossus: 'Gravelord Ossus destroyed', vargoth: 'Vargoth the Undying ended',
-    any: 'Beasts or bandits slain',
+    cinderwraith: 'Cinder Wraiths snuffed', ashhound: 'Ash Hounds put down',
+    obsidiangolem: 'Obsidian Golems shattered', emberlord: 'Emberlord Vssaric ended',
+    pyraxis: 'Pyraxis the Cinder Wyrm slain',
+    any: 'Creatures slain',
   }[kind] || kind;
 }

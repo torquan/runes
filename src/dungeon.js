@@ -131,10 +131,12 @@ export function buildDungeon(scene) {
   swirlOut.rotation.y = Math.PI / 2;
   group.add(swirlOut);
 
+  entrance.visible = false; // revealed once the Pale King falls
   scene.add(group);
 
   return {
     walls: wallBoxes,
+    entrance,
     portals: [
       { x: ex, z: ez, label: 'Enter the Sunken Crypt', dest: { x: 263, z: 0, zone: 'crypt' } },
       { x: 260.2, z: 0, label: 'Leave the crypt', dest: { x: -27, z: 33, zone: 'world' } },

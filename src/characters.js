@@ -22,6 +22,10 @@ export const CLASS_STYLES = {
   gravelord: { tunic: 0xc8bca0, trim: 0x4a4038, weapon: 'staff' },
   undying: { tunic: 0x3a2a4a, trim: 0xc9921e, weapon: 'sword' },
   boneguard: { tunic: 0xb0a890, trim: 0x6e6050, weapon: 'sword' },
+  // ---- the Ashen Highlands ----
+  kaska:   { tunic: 0x6e2a12, trim: 0xff7a30, weapon: 'staff' },  // Emberwarden gate NPC (warm/ember)
+  golem:   { tunic: 0x161018, trim: 0x4a3a18, weapon: 'none' },   // Obsidian Golem (humanoid rig, scaled)
+  wraith:  { tunic: 0x3a1818, trim: 0xff5020, weapon: 'staff' },  // Cinder Wraith (ranged caster)
 };
 
 export function buildHumanoid(style) {

@@ -77,6 +77,13 @@
         <span class="rune-key">Q</span>
       </div>
 
+      <!-- talent points badge -->
+      <div id="talent-badge" class="hidden" title="Press T to spend talent points">
+        <span class="talent-glyph">✦</span>
+        <span id="talent-count">0</span>
+        <span class="rune-key">T</span>
+      </div>
+
       <!-- action bar -->
       <div id="action-bar-wrap">
         <div id="xp-bar"><div id="xp-fill"></div><span id="xp-text"></span></div>
@@ -111,6 +118,38 @@
         <div id="shop-gold">Your gold: <span id="shop-gold-amount">0</span><span class="gold-coin"></span></div>
         <div id="shop-items"></div>
         <div class="dialog-buttons"><button id="shop-close" class="btn-ornate btn-dim">Close</button></div>
+      </div>
+    </div>
+
+    <!-- inventory / bag -->
+    <div id="inventory-panel" class="hidden">
+      <div class="dialog-frame inv-frame">
+        <div class="dialog-title">Pack</div>
+        <div class="inv-tabs">
+          <button id="inv-tab-bag" class="btn-ornate inv-tab active">Equipment</button>
+          <button id="inv-tab-sell" class="btn-ornate inv-tab btn-dim">Sell to Barnaby</button>
+        </div>
+        <div id="inv-equipped">
+          <div class="equip-slot" data-slot="weapon"><span class="eq-label">Weapon</span><div class="eq-cell"></div></div>
+          <div class="equip-slot" data-slot="armor"><span class="eq-label">Armor</span><div class="eq-cell"></div></div>
+          <div class="equip-slot" data-slot="trinket"><span class="eq-label">Trinket</span><div class="eq-cell"></div></div>
+        </div>
+        <div id="inv-stats-summary"></div>
+        <div id="inv-grid"></div>
+        <div class="dialog-buttons"><button id="inv-close" class="btn-ornate btn-dim">Close</button></div>
+      </div>
+    </div>
+
+    <!-- talents -->
+    <div id="talent-panel" class="hidden">
+      <div class="dialog-frame talent-frame">
+        <div class="dialog-title">Paths of Power</div>
+        <div id="talent-points-line">Unspent points: <span id="talent-points-num">0</span></div>
+        <div id="talent-cols"></div>
+        <div class="dialog-buttons">
+          <button id="talent-respec" class="btn-ornate btn-dim">Visit Barnaby to respec</button>
+          <button id="talent-close" class="btn-ornate btn-dim">Close</button>
+        </div>
       </div>
     </div>
 
@@ -163,7 +202,7 @@
         </button>
       </div>
       <p class="title-foot">A second class awaits at level 10 — as is the old custom of Taborea.</p>
-      <p class="title-controls">WASD move · drag to look · click / Tab target · 1–4 skills · F interact</p>
+      <p class="title-controls">WASD move · drag to look · click / Tab target · 1–4 skills · 9/0/- ultimates · I bag · T talents · F interact</p>
     </div>
   </div>
 

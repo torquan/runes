@@ -50,10 +50,21 @@ npm run dev    # → http://localhost:5173
   (he raises thralls as you wound him). Long fights, long respawns, big loot.
 - **Barnaby's Wares** — a gold sink: potions, escalating-price permanent
   training (+damage, +health, +crit), and Swift Boots.
-- **The Sunken Crypt** — a level-60+ dungeon beneath the hills northwest of
+- **The Sunken Crypt** — the level 41–55 capstone dungeon beneath the hills northwest of
   camp: revenant packs that punish careless pulls, **Gravelord Ossus**, and
   **Vargoth the Undying** — slam, curse, and summons all at once. The walls
   are solid, the dark is honest, and the dead hit very, very hard.
+- **Talents** — from level 10, one point per level across three branches —
+  **Onslaught** (offense), **Bulwark** (defense), and **Pathfinder** (utility).
+  Fifteen points in a branch unlocks its capstone active: Execute (a killing
+  blow under 30% health), Stoneform (50% damage reduction), or Dash (an
+  8-metre blink to dodge anything).
+- **The Ashen Highlands** — the level 55–75 post-cap arc beyond the mountain
+  pass: Cinder Wraiths (ranged casters), Ash Hounds (fast pack hunters),
+  Obsidian Golems (armored sentries), the elite **Emberlord Vssaric**, and the
+  world boss **Pyraxis, the Cinder Wyrm** — slam, breath, and clinging fire
+  patches that linger and shrink the arena. The level 55+ gear tier and its
+  legendaries drop here, alongside Emberwarden Kaska's quest chain and bounty.
 - **Save & continue** — progress persists in localStorage; the title screen
   offers to continue your hero. Picking a class card forges a new hero
   (and erases the old save).

@@ -501,3 +501,83 @@ body {
   font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 0.12em; color: #6e6248;
   animation: title-in 1s 1.1s ease-out both;
 }
+
+/* ---------- inventory panel (modal, mirrors shop) ---------- */
+#inventory-panel { position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(8, 5, 2, .45); backdrop-filter: blur(2px); z-index: 33; }
+.inv-frame { min-width: 380px; }
+.inv-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+.inv-tab.active { box-shadow: 0 0 0 2px var(--bronze-hi) inset; }
+#inv-equipped { display: flex; gap: 14px; justify-content: center; margin-bottom: 10px; }
+.equip-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.eq-label { font-size: 11px; color: var(--parchment); opacity: .8; }
+.eq-cell, .inv-cell { width: 52px; height: 52px; border-radius: 8px;
+  background: var(--panel); border: 2px solid var(--panel-edge);
+  display: grid; place-items: center; cursor: pointer; }
+.inv-icon { font-size: 24px; }
+#inv-grid { display: grid; grid-template-columns: repeat(6, 52px); gap: 7px; margin-bottom: 10px; }
+#inv-stats-summary { text-align: center; color: var(--gold-text); font-size: 12px; margin-bottom: 8px; }
+
+/* rarity borders */
+.r-common    { border-color: #9aa0a6; }
+.r-uncommon  { border-color: #5edb6a; }
+.r-rare      { border-color: #6fb6ff; }
+.r-epic      { border-color: #b08aff; }
+.r-legendary { border-color: #ff9a30; box-shadow: 0 0 8px rgba(255, 154, 48, .55); }
+
+/* JS stat-compare tooltip */
+.inv-tooltip { position: absolute; display: none; z-index: 60; width: 200px; padding: 10px 12px;
+  background: var(--panel); border: 2px solid var(--panel-edge); border-radius: 8px;
+  font-size: 12px; color: var(--parchment); pointer-events: none; }
+.tip-name { font-weight: bold; margin-bottom: 2px; }
+.tip-sub { opacity: .7; margin-bottom: 6px; font-size: 11px; }
+.tip-stat { line-height: 1.5; }
+.stat-up { color: #5edb6a; } .stat-down { color: #ff6b6b; }
+.tip-flavor { margin-top: 6px; font-style: italic; opacity: .75; }
+.tip-value { margin-top: 4px; color: var(--gold-text); }
+
+/* rarity-colored loot log lines + floating text */
+.log-loot-common{color:#cfd3d6}.log-loot-uncommon{color:#5edb6a}.log-loot-rare{color:#6fb6ff}
+.log-loot-epic{color:#b08aff}.log-loot-legendary{color:#ff9a30}
+.fct.loot-common{color:#cfd3d6}.fct.loot-uncommon{color:#5edb6a}.fct.loot-rare{color:#6fb6ff}
+.fct.loot-epic{color:#b08aff}.fct.loot-legendary{color:#ff9a30}
+
+/* ---------- talent badge (HUD, sits above the potion pouch) ---------- */
+#talent-badge {
+  position: absolute; right: 18px; bottom: 126px; padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px; cursor: pointer; pointer-events: auto;
+  background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.8), 0 4px 18px rgba(0,0,0,.6);
+}
+#talent-badge:hover { border-color: var(--bronze-hi); }
+.talent-glyph { font-size: 1.3rem; color: #ffd76e; text-shadow: 0 0 10px rgba(255,215,110,.9); }
+#talent-count { font-family: 'Cinzel', serif; font-weight: 900; font-size: 1rem; color: var(--parchment); }
+#talent-badge.nudge { animation: talent-nudge 1.1s ease-in-out 3; }
+@keyframes talent-nudge {
+  0%,100% { box-shadow: inset 0 0 0 1px rgba(0,0,0,.8), 0 4px 18px rgba(0,0,0,.6); }
+  50% { box-shadow: 0 0 16px 3px rgba(255,215,110,.85), inset 0 0 0 1px rgba(0,0,0,.8); }
+}
+
+/* ---------- talent panel (modal, mirrors shop/inventory) ---------- */
+#talent-panel { position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(8,5,2,.45); backdrop-filter: blur(2px); z-index: 34; }
+.talent-frame { min-width: 560px; }
+#talent-points-line { text-align: center; color: var(--gold-text); font-size: 0.9rem; margin-bottom: 12px; }
+#talent-cols { display: flex; gap: 16px; justify-content: center; }
+.talent-col { flex: 1; max-width: 180px; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; border: 1px solid var(--panel-edge); border-radius: 8px; background: rgba(0,0,0,.25); }
+.talent-col h3 { font-family: 'Cinzel', serif; font-size: 0.9rem; color: var(--gold-text); text-align: center; }
+.talent-flavor { font-size: 0.7rem; color: #b8a071; text-align: center; min-height: 2.4em; }
+.talent-tier { font-size: 0.74rem; color: var(--parchment); }
+.talent-tier .t-label { color: var(--gold-text); }
+.talent-pips { letter-spacing: 2px; font-size: 0.7rem; }
+.talent-pips .on { color: var(--bronze-hi); } .talent-pips .off { color: #4a3a1a; }
+.talent-gcd { font-size: 0.7rem; color: #9ecfdd; font-style: italic; }
+.talent-cap { margin-top: 6px; padding: 6px; border-radius: 6px; border: 1px dashed var(--bronze-lo); text-align: center; font-size: 0.72rem; }
+.talent-cap.unlocked { border-style: solid; border-color: var(--bronze-hi); color: var(--gold-text); box-shadow: 0 0 10px rgba(255,215,110,.4); }
+.talent-cap.locked { color: #7a6a4a; }
+.talent-spend { margin-top: 6px; }
+.talent-spend:disabled { filter: saturate(.2) brightness(.6); cursor: default; }
+
+/* capstone action-bar slot tint */
+.skill-slot.capstone { border-color: var(--bronze-hi); box-shadow: inset 0 0 0 1px #000, 0 0 10px rgba(255,215,110,.35); }
