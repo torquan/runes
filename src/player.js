@@ -283,7 +283,7 @@ export function updatePlayer(game, dt, elapsed) {
   if (player.alive) {
     const yaw = player.cam.yaw;
     moveDir.set(0, 0, 0);
-    if (input.keys.has('KeyW')) { moveDir.x -= Math.sin(yaw); moveDir.z -= Math.cos(yaw); }
+    if (input.keys.has('KeyW') || input.mouseForward) { moveDir.x -= Math.sin(yaw); moveDir.z -= Math.cos(yaw); }
     if (input.keys.has('KeyS')) { moveDir.x += Math.sin(yaw); moveDir.z += Math.cos(yaw); }
     if (input.keys.has('KeyA')) { moveDir.x -= Math.cos(yaw); moveDir.z += Math.sin(yaw); }
     if (input.keys.has('KeyD')) { moveDir.x += Math.cos(yaw); moveDir.z -= Math.sin(yaw); }

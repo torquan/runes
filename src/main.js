@@ -40,7 +40,7 @@ const game = {
   fx: createFx(scene),
   quests: createQuests(),
   audio: sfx,
-  input: { keys: new Set() },
+  input: { keys: new Set(), mouseForward: false },
   classes: CLASSES,
   started: false,
   zone: 'world',
@@ -174,9 +174,12 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => game.input.keys.delete(e.code));
 window.addEventListener('blur', () => game.input.keys.clear());
 
-// --- mouse: drag = orbit camera, click = target ---
+// --- mouse: drag = orbit camera, click = target, both buttons = run ---
 let dragging = false, dragMoved = 0, lastX = 0, lastY = 0;
+const mouseButtons = new Set();
 canvas.addEventListener('mousedown', (e) => {
+  mouseButtons.add(e.button);
+  game.input.mouseForward = mouseButtons.has(0) && mouseButtons.has(2);
   dragging = true;
   dragMoved = 0;
   lastX = e.clientX;
@@ -197,11 +200,19 @@ window.addEventListener('mousemove', (e) => {
 });
 window.addEventListener('mouseup', (e) => {
   if (!dragging) return;
+  const wasMouseRun = game.input.mouseForward;
+  mouseButtons.delete(e.button);
+  game.input.mouseForward = mouseButtons.has(0) && mouseButtons.has(2);
+  if (mouseButtons.size > 0) return; // still steering with the other button
   dragging = false;
   canvas.classList.remove('dragging');
-  if (dragMoved <= 4 && game.started && e.target === canvas) {
+  if (dragMoved <= 4 && game.started && e.target === canvas && !wasMouseRun) {
     clickTarget(game, e.clientX, e.clientY);
   }
+});
+window.addEventListener('blur', () => {
+  mouseButtons.clear();
+  game.input.mouseForward = false;
 });
 canvas.addEventListener('wheel', (e) => {
   if (!game.started) return;
