@@ -71,6 +71,53 @@ const ENEMY_TYPES = {
     build: () => buildHumanoid('thrall'),
     humanoid: true, temporary: true,
   },
+  // ---- the Sunken Crypt ----
+  revenant: {
+    name: 'Crypt Revenant', level: 55, hp: 6000, dmgMin: 280, dmgMax: 380, xp: 800,
+    speed: 5.8, aggroRadius: 8, attackRange: 2.4, gold: [60, 120], respawn: 60, wanderR: 1.5,
+    build: () => buildHumanoid('revenant'),
+    humanoid: true,
+  },
+  ossus: {
+    name: 'Gravelord Ossus', level: 60, hp: 80000, dmgMin: 380, dmgMax: 480, xp: 25000,
+    speed: 4.4, aggroRadius: 15, attackRange: 3.4, gold: [3000, 4500], respawn: 240, wanderR: 2,
+    build: () => { const g = buildHumanoid('gravelord'); g.scale.setScalar(2.0); return g; },
+    humanoid: true, elite: true,
+    mechanics: [{
+      kind: 'zone', interval: 7, telegraph: 1.5, radius: 6, dmg: 850,
+      center: 'player', avoid: 'move', color: 0x7aff9a,
+      warn: 'calls bones from the floor — MOVE!',
+      dodgeMsg: 'The bone spikes find nothing.',
+    }],
+    summons: { at: [0.6, 0.3], kind: 'boneguard', count: 2 },
+  },
+  vargoth: {
+    name: 'Vargoth the Undying', level: 65, hp: 140000, dmgMin: 450, dmgMax: 580, xp: 50000,
+    speed: 4.6, aggroRadius: 16, attackRange: 3.6, gold: [8000, 12000], respawn: 300, wanderR: 2,
+    build: () => { const g = buildHumanoid('undying'); g.scale.setScalar(2.2); return g; },
+    humanoid: true, elite: true,
+    mechanics: [
+      {
+        kind: 'slam', interval: 9, telegraph: 1.5, radius: 9, dmg: 800,
+        center: 'boss', avoid: 'jump', color: 0xc9921e,
+        warn: 'shatters the crypt floor — JUMP!',
+        dodgeMsg: 'You leap over the rolling quake!',
+      },
+      {
+        kind: 'zone', interval: 8, telegraph: 1.4, radius: 6.5, dmg: 950,
+        center: 'player', avoid: 'move', color: 0xb090ff,
+        warn: 'curses the ground you stand on — MOVE!',
+        dodgeMsg: 'The curse withers on empty stone.',
+      },
+    ],
+    summons: { at: [0.75, 0.5, 0.25], kind: 'boneguard', count: 2 },
+  },
+  boneguard: {
+    name: 'Boneguard', level: 60, hp: 8000, dmgMin: 300, dmgMax: 400, xp: 1200,
+    speed: 5.8, aggroRadius: 50, attackRange: 2.4, gold: [80, 150],
+    build: () => buildHumanoid('boneguard'),
+    humanoid: true, temporary: true,
+  },
 };
 
 export const TRIAL_SITES = {
@@ -156,6 +203,27 @@ export function spawnEnemies(scene) {
     enemies.push(e);
     scene.add(e.group);
   }
+
+  // the Sunken Crypt: revenant packs, the Gravelord, and the Undying on his throne
+  const cryptSpawns = [
+    // entry room pair
+    [272, -5], [272, 5],
+    // great hall packs (kept clear of the corridor walls — aggro has no eyes)
+    [297, -7], [299, -5], [302, 7], [304, 5], [309, -7], [311, -5],
+    // corridor B sentry
+    [322, 0],
+    // throne room guard
+    [331, -6], [331, 6], [338, 7],
+  ];
+  for (const [x, z] of cryptSpawns) {
+    const e = makeEnemy('revenant', x, z);
+    enemies.push(e);
+    scene.add(e.group);
+  }
+  const ossus = makeEnemy('ossus', 305, 0);
+  const vargoth = makeEnemy('vargoth', 338, 0);
+  enemies.push(ossus, vargoth);
+  scene.add(ossus.group, vargoth.group);
 
   return enemies;
 }
@@ -347,7 +415,8 @@ export function updateEnemies(game, dt, elapsed) {
         e.stateTimer -= dt;
         if (e.stateTimer <= 0) {
           const a = Math.random() * Math.PI * 2;
-          const r = 3 + Math.random() * 7;
+          const max = t.wanderR ?? 7;
+          const r = Math.min(max, 1.5 + Math.random() * max);
           e.wanderTarget = new THREE.Vector3(
             e.home.x + Math.cos(a) * r, 0, e.home.z + Math.sin(a) * r
           );

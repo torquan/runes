@@ -300,10 +300,31 @@ export function updatePlayer(game, dt, elapsed) {
       }
       const nx = g.position.x + moveDir.x * player.speed * dt;
       const nz = g.position.z + moveDir.z * player.speed * dt;
-      const limit = 150;
-      g.position.x = THREE.MathUtils.clamp(nx, -limit, limit);
-      g.position.z = THREE.MathUtils.clamp(nz, -limit, limit);
+      if (game.zone === 'crypt') {
+        g.position.x = THREE.MathUtils.clamp(nx, 252, 358);
+        g.position.z = THREE.MathUtils.clamp(nz, -58, 58);
+      } else {
+        g.position.x = THREE.MathUtils.clamp(nx, -150, 150);
+        g.position.z = THREE.MathUtils.clamp(nz, -150, 150);
+      }
       g.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+    }
+
+    // crypt walls are solid (for you, at least)
+    if (game.zone === 'crypt' && game.dungeon) {
+      const r = 0.55;
+      for (const w of game.dungeon.walls) {
+        const px = g.position.x, pz = g.position.z;
+        if (px > w.x1 - r && px < w.x2 + r && pz > w.z1 - r && pz < w.z2 + r) {
+          const pushW = px - (w.x1 - r), pushE = (w.x2 + r) - px;
+          const pushN = pz - (w.z1 - r), pushS = (w.z2 + r) - pz;
+          const min = Math.min(pushW, pushE, pushN, pushS);
+          if (min === pushW) g.position.x = w.x1 - r;
+          else if (min === pushE) g.position.x = w.x2 + r;
+          else if (min === pushN) g.position.z = w.z1 - r;
+          else g.position.z = w.z2 + r;
+        }
+      }
     }
 
     // vertical physics: jumping and gravity over the terrain

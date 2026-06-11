@@ -122,6 +122,7 @@ export function createUi() {
       $('rune-count').textContent = p.runes;
       $('potion-count').textContent = p.potionCd > 0 ? Math.ceil(p.potionCd) : p.potions;
       $('potion-pouch').classList.toggle('on-cd', p.potionCd > 0);
+      $('zone-name').textContent = game.zone === 'crypt' ? 'The Sunken Crypt' : 'Howling Plains';
 
       // target frame
       const t = p.target;
@@ -352,7 +353,10 @@ export function createUi() {
     shopOpen() { return !$('shop-panel').classList.contains('hidden'); },
 
     // ---------- prompts & splashes ----------
-    setInteractPrompt(visible) { $('interact-prompt').classList.toggle('hidden', !visible); },
+    setInteractPrompt(visible, label) {
+      $('interact-prompt').classList.toggle('hidden', !visible);
+      if (visible && label) $('interact-label').textContent = label;
+    },
     showDeathScreen() { $('death-screen').classList.remove('hidden'); },
     hideDeathScreen() { $('death-screen').classList.add('hidden'); },
 
@@ -383,6 +387,12 @@ export function createUi() {
       ctx.beginPath();
       ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
       ctx.clip();
+
+      // underground, the map shows only darkness and what hunts nearby
+      if (game.zone === 'crypt') {
+        ctx.fillStyle = '#0c0a10';
+        ctx.fillRect(0, 0, S, S);
+      }
 
       const pxPerWorld = MAP_RES / WORLD_SIZE;
       const sw = VIEW * pxPerWorld;
@@ -433,6 +443,7 @@ function targetLabel(kind) {
     boar: 'Young Boars slain', wolf: 'Forest Wolves slain', boss: 'Bodo the Ravager slain',
     bandit: 'Grimblade Bandits slain', banditking: 'Rurik the Red slain',
     korgrim: 'Korgrim toppled', vexnar: 'Vexnar grounded', morgrath: 'The Pale King unkinged',
+    ossus: 'Gravelord Ossus destroyed', vargoth: 'Vargoth the Undying ended',
     any: 'Beasts or bandits slain',
   }[kind] || kind;
 }

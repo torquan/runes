@@ -31,9 +31,14 @@ export function fbm(x, z, octaves = 4) {
 
 export const WORLD_SIZE = 320;
 
+// The Sunken Crypt lives in a pocket far outside the valley; the shared height
+// function returns its flat floor there so every system works inside unchanged.
+export const CRYPT = { x1: 250, x2: 360, z1: -60, z2: 60, floor: 30 };
+
 // Terrain height: rolling meadow, flattened around the pioneer camp at origin,
 // rising toward the rim so the world reads as a mountain-ringed valley.
 export function heightAt(x, z) {
+  if (x > CRYPT.x1 && x < CRYPT.x2 && z > CRYPT.z1 && z < CRYPT.z2) return CRYPT.floor;
   const d = Math.hypot(x, z);
   let h = fbm(x * 0.018 + 31.7, z * 0.018 + 12.3, 4) * 11 - 4.5;
   h += fbm(x * 0.06 + 7.1, z * 0.06 + 91.4, 3) * 1.6;

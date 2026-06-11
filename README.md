@@ -50,6 +50,10 @@ npm run dev    # → http://localhost:5173
   (he raises thralls as you wound him). Long fights, long respawns, big loot.
 - **Barnaby's Wares** — a gold sink: potions, escalating-price permanent
   training (+damage, +health, +crit), and Swift Boots.
+- **The Sunken Crypt** — a level-60+ dungeon beneath the hills northwest of
+  camp: revenant packs that punish careless pulls, **Gravelord Ossus**, and
+  **Vargoth the Undying** — slam, curse, and summons all at once. The walls
+  are solid, the dark is honest, and the dead hit very, very hard.
 - **Save & continue** — progress persists in localStorage; the title screen
   offers to continue your hero. Picking a class card forges a new hero
   (and erases the old save).

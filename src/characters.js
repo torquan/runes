@@ -18,6 +18,10 @@ export const CLASS_STYLES = {
   giant:   { tunic: 0x6e7480, trim: 0x3e444e, weapon: 'none' },
   paleking: { tunic: 0xc8c8d8, trim: 0xc9921e, weapon: 'sword' },
   thrall:  { tunic: 0x8a9090, trim: 0x5a6060, weapon: 'sword' },
+  revenant: { tunic: 0x5e7a66, trim: 0x2e4a38, weapon: 'sword' },
+  gravelord: { tunic: 0xc8bca0, trim: 0x4a4038, weapon: 'staff' },
+  undying: { tunic: 0x3a2a4a, trim: 0xc9921e, weapon: 'sword' },
+  boneguard: { tunic: 0xb0a890, trim: 0x6e6050, weapon: 'sword' },
 };
 
 export function buildHumanoid(style) {

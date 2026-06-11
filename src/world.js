@@ -372,5 +372,5 @@ export function buildWorld(scene) {
     }
   }
 
-  return { terrain, update, sunLight: sun };
+  return { terrain, update, sunLight: sun, hemi, sky };
 }

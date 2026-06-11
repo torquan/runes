@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
+import { buildDungeon } from './dungeon.js';
+import { heightAt } from './noise.js';
 import { spawnEnemies, spawnNpc, updateEnemies, updateNpc } from './entities.js';
 import { createPlayer, updatePlayer, CLASSES } from './player.js';
 import { castSkill, updateCombat, clickTarget, tabTarget, useRune, createFx } from './combat.js';
@@ -26,12 +28,13 @@ window.addEventListener('resize', () => {
 
 // --- build the world up front so it sits behind the title screen ---
 const world = buildWorld(scene);
+const dungeon = buildDungeon(scene);
 const enemies = spawnEnemies(scene);
 const npc = spawnNpc(scene);
 scene.add(npc.group);
 
 const game = {
-  scene, camera, renderer, world, enemies, npc,
+  scene, camera, renderer, world, dungeon, enemies, npc,
   player: null,
   ui: createUi(),
   fx: createFx(scene),
@@ -40,7 +43,63 @@ const game = {
   input: { keys: new Set() },
   classes: CLASSES,
   started: false,
+  zone: 'world',
 };
+
+// --- zone atmosphere: golden meadow vs crypt gloom ---
+function setZone(zone) {
+  game.zone = zone;
+  if (zone === 'crypt') {
+    scene.fog.color.set(0x0a0c10);
+    scene.fog.near = 8;
+    scene.fog.far = 52;
+    scene.background.set(0x05060a);
+    world.sky.visible = false;
+    world.hemi.intensity = 0.25;
+    world.sunLight.intensity = 0.1;
+  } else {
+    scene.fog.color.set(0xc4d4e0);
+    scene.fog.near = 60;
+    scene.fog.far = 230;
+    scene.background.set(0x9ec4e8);
+    world.sky.visible = true;
+    world.hemi.intensity = 0.85;
+    world.sunLight.intensity = 1.6;
+  }
+}
+
+function usePortal(portal) {
+  const p = game.player;
+  const { x, z, zone } = portal.dest;
+  p.target = null;
+  p.casting = null;
+  game.ui.hideCastBar();
+  p.group.position.set(x, heightAt(x, z), z);
+  setZone(zone);
+  sfx.rune();
+  game.ui.log(
+    zone === 'crypt'
+      ? 'Cold air swallows you. The Sunken Crypt does not echo — it listens.'
+      : 'Daylight. You had forgotten it had a color.',
+    'log-sys'
+  );
+  // snap the camera so it doesn't pan across the void
+  const cam = p.cam;
+  camera.position.set(
+    x + Math.sin(cam.yaw) * cam.dist,
+    heightAt(x, z) + 4,
+    z + Math.cos(cam.yaw) * cam.dist
+  );
+}
+
+function nearestPortal() {
+  if (!game.player) return null;
+  const pos = game.player.group.position;
+  for (const portal of dungeon.portals) {
+    if (Math.hypot(pos.x - portal.x, pos.z - portal.z) < 4) return portal;
+  }
+  return null;
+}
 game.onCast = (i) => castSkill(game, i);
 window.__game = game;
 
@@ -99,8 +158,11 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyQ') game.player.usePotion(game);
   if (e.code === 'Space') { e.preventDefault(); game.player.tryJump(); }
   if (e.code === 'KeyF') {
+    const portal = nearestPortal();
     if (game.player.group.position.distanceTo(npc.group.position) < 5) {
       game.quests.openDialog(game);
+    } else if (portal && game.player.alive) {
+      usePortal(portal);
     }
   }
   if (e.code === 'Escape') {
@@ -152,7 +214,10 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 document.getElementById('rune-pouch').addEventListener('click', () => game.started && useRune(game));
 document.getElementById('potion-pouch').addEventListener('click', () => game.started && game.player.usePotion(game));
 document.getElementById('shop-close').addEventListener('click', () => game.ui.hideShop());
-document.getElementById('respawn-btn').addEventListener('click', () => game.player.respawn(game));
+document.getElementById('respawn-btn').addEventListener('click', () => {
+  setZone('world');
+  game.player.respawn(game);
+});
 
 // --- title screen / class select ---
 document.querySelectorAll('#class-select .class-card').forEach((card) => {
@@ -249,8 +314,16 @@ function tick() {
     world.update(dt, elapsed, game.player.group.position);
 
     const npcDist = updateNpc(npc, game, elapsed);
-    game.ui.setInteractPrompt(npcDist < 5 && !game.ui.dialogOpen() && game.player.alive);
+    const portal = nearestPortal();
+    if (npcDist < 5 && !game.ui.dialogOpen() && game.player.alive) {
+      game.ui.setInteractPrompt(true, 'Talk');
+    } else if (portal && game.player.alive) {
+      game.ui.setInteractPrompt(true, portal.label);
+    } else {
+      game.ui.setInteractPrompt(false);
+    }
 
+    dungeon.update(elapsed);
     game.fx.update(dt);
     game.ui.update(game);
   } else {

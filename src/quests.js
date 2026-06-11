@@ -66,6 +66,22 @@ const QUESTS = [
     outro: `The Pale King… unkinged. I have no words, and Barnaby ALWAYS has words. The Trials are done, the stones stand quiet, and Taborea owes you a debt it cannot count. The bounty board is yours forever, hero.`,
     rewardXp: 16000, rewardGold: 3500, rewardRunes: 10,
   },
+  {
+    id: 'ossus',
+    name: 'The Sunken Crypt',
+    targetKind: 'ossus', count: 1, trial: true,
+    intro: `When Morgrath fell, something beneath the old hill northwest of camp… woke up. The diggers found an archway down there — older than the sentinel stones, older than Taborea maybe — and none who entered came back out. They speak a name in their sleep, the ones who camped too close: OSSUS. Take the stair beneath the arch, hero. Mind the dead — they walk in packs down there, and the walls give no room to run.`,
+    outro: `The Gravelord, dust at last! But the diggers say the deepest door is still shut, and behind it something old keeps NOT dying. One more descent, hero. The last one.`,
+    rewardXp: 30000, rewardGold: 5000, rewardRunes: 8,
+  },
+  {
+    id: 'vargoth',
+    name: 'The Undying',
+    targetKind: 'vargoth', count: 1, trial: true,
+    intro: `VARGOTH THE UNDYING. Morgrath's master, the first necromancer, the reason the crypt was sunk and sealed. He sits a throne at the bottom of the dark and he has had a thousand years to get angry. He breaks the floor — jump it. He curses the ground — leave it. He raises his guard — cut them down before they cut you. No hero has ever needed all three lessons at once. You will. Goddess go with you, because I certainly won't.`,
+    outro: `…You're standing here. Which means the Undying isn't. THE UNDYING ISN'T! Hero, when they sing of Taborea a hundred years from now, the song will be about YOU. The crypt is yours to plunder, the plains are yours to guard, and my fire is yours forever.`,
+    rewardXp: 60000, rewardGold: 10000, rewardRunes: 15,
+  },
 ];
 
 const BOUNTY = {
@@ -288,6 +304,7 @@ function targetName(kind) {
     boar: 'Young Boar', wolf: 'Forest Wolf', boss: 'Bodo the Ravager',
     bandit: 'Grimblade Bandit', banditking: 'Rurik the Red',
     korgrim: 'Korgrim the Mountain', vexnar: 'Vexnar the Ash Dragon', morgrath: 'Morgrath, the Pale King',
+    ossus: 'Gravelord Ossus', vargoth: 'Vargoth the Undying',
   }[kind] || kind;
 }
 
