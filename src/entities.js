@@ -30,7 +30,7 @@ const ENEMY_TYPES = {
   // ---- the Trials: endgame bosses with mechanics ----
   korgrim: {
     name: 'Korgrim the Mountain', level: 30, hp: 28000, dmgMin: 150, dmgMax: 210, xp: 5000,
-    speed: 3.6, aggroRadius: 13, attackRange: 4.2, gold: [600, 900], respawn: 120,
+    speed: 3.6, aggroRadius: 13, attackRange: 4.2, gold: [600, 900], respawn: 120, leash: 50,
     build: () => { const g = buildHumanoid('giant'); g.scale.setScalar(2.7); return g; },
     humanoid: true, elite: true,
     mechanics: [{
@@ -42,7 +42,7 @@ const ENEMY_TYPES = {
   },
   vexnar: {
     name: 'Vexnar the Ash Dragon', level: 40, hp: 45000, dmgMin: 190, dmgMax: 260, xp: 9000,
-    speed: 4.4, aggroRadius: 14, attackRange: 4.6, gold: [1000, 1500], respawn: 150,
+    speed: 4.4, aggroRadius: 14, attackRange: 4.6, gold: [1000, 1500], respawn: 150, leash: 50,
     build: () => buildDragon(),
     elite: true,
     mechanics: [{
@@ -54,7 +54,7 @@ const ENEMY_TYPES = {
   },
   morgrath: {
     name: 'Morgrath, the Pale King', level: 50, hp: 70000, dmgMin: 230, dmgMax: 310, xp: 15000,
-    speed: 4.8, aggroRadius: 13, attackRange: 3.4, gold: [1800, 2600], respawn: 180,
+    speed: 4.8, aggroRadius: 13, attackRange: 3.4, gold: [1800, 2600], respawn: 180, leash: 50,
     build: () => { const g = buildHumanoid('paleking'); g.scale.setScalar(1.8); return g; },
     humanoid: true, elite: true,
     mechanics: [{
@@ -74,13 +74,13 @@ const ENEMY_TYPES = {
   // ---- the Sunken Crypt ----
   revenant: {
     name: 'Crypt Revenant', level: 55, hp: 6000, dmgMin: 280, dmgMax: 380, xp: 800,
-    speed: 5.8, aggroRadius: 8, attackRange: 2.4, gold: [60, 120], respawn: 60, wanderR: 1.5,
+    speed: 5.8, aggroRadius: 8, attackRange: 2.4, gold: [60, 120], respawn: 600, wanderR: 1.5,
     build: () => buildHumanoid('revenant'),
     humanoid: true,
   },
   ossus: {
     name: 'Gravelord Ossus', level: 60, hp: 80000, dmgMin: 380, dmgMax: 480, xp: 25000,
-    speed: 4.4, aggroRadius: 15, attackRange: 3.4, gold: [3000, 4500], respawn: 240, wanderR: 2,
+    speed: 4.4, aggroRadius: 15, attackRange: 3.4, gold: [3000, 4500], respawn: 240, wanderR: 2, leash: 80,
     build: () => { const g = buildHumanoid('gravelord'); g.scale.setScalar(2.0); return g; },
     humanoid: true, elite: true,
     mechanics: [{
@@ -93,7 +93,7 @@ const ENEMY_TYPES = {
   },
   vargoth: {
     name: 'Vargoth the Undying', level: 65, hp: 140000, dmgMin: 450, dmgMax: 580, xp: 50000,
-    speed: 4.6, aggroRadius: 16, attackRange: 3.6, gold: [8000, 12000], respawn: 300, wanderR: 2,
+    speed: 4.6, aggroRadius: 16, attackRange: 3.6, gold: [8000, 12000], respawn: 300, wanderR: 2, leash: 80,
     build: () => { const g = buildHumanoid('undying'); g.scale.setScalar(2.2); return g; },
     humanoid: true, elite: true,
     mechanics: [
@@ -434,7 +434,7 @@ export function updateEnemies(game, dt, elapsed) {
 
       case 'chase': {
         if (!player.alive) { e.state = 'return'; break; }
-        if (distToHome > 32) { e.state = 'return'; e.hp = e.maxHp; break; }
+        if (distToHome > (t.leash ?? 32)) { e.state = 'return'; e.hp = e.maxHp; break; }
         e.anim.moving = true;
         e.anim.speed = 1;
         if (distToPlayer > t.attackRange) {
