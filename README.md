@@ -16,6 +16,7 @@ npm run dev    # → http://localhost:5173
 | --- | --- |
 | `WASD` | Move |
 | Drag mouse | Orbit camera · wheel zooms |
+| Both mouse buttons | Run forward while steering with the mouse |
 | Click / `Tab` | Target an enemy |
 | `1`–`4` | Skills (per class) |
 | `F` | Talk to Pioneer Barnaby |

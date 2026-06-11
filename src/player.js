@@ -407,17 +407,6 @@ export function updatePlayer(game, dt, elapsed) {
 
   // --- movement ---
   if (player.alive) {
-    // run-steering (both buttons or W+LMB): cursor offset from screen center is a
-    // continuous turn rate, so holding the cursor left walks a full circle without
-    // ever dragging the mouse further
-    if (input.mouseForward || (input.lmb && input.keys.has('KeyW'))) {
-      const half = window.innerWidth / 2;
-      const raw = (input.cursorX - half) / half;
-      const dead = 0.06; // centered cursor = run straight
-      const full = 0.6;  // full turn rate well before the screen edge
-      const off = THREE.MathUtils.clamp((raw - Math.sign(raw) * dead) / (full - dead), -1, 1);
-      if (Math.abs(raw) > dead) player.cam.yaw -= off * 3.0 * dt;
-    }
     const yaw = player.cam.yaw;
     moveDir.set(0, 0, 0);
     if (input.keys.has('KeyW') || input.mouseForward) { moveDir.x -= Math.sin(yaw); moveDir.z -= Math.cos(yaw); }
@@ -517,8 +506,6 @@ export function updatePlayer(game, dt, elapsed) {
   const pz = g.position.z + Math.cos(cam.yaw) * cam.dist * cosP;
   let py = g.position.y + 1.4 + Math.sin(cam.pitch) * cam.dist;
   py = Math.max(py, heightAt(px, pz) + 0.6); // keep camera above the ground
-  camera.position.lerp(v0.set(px, py, pz), Math.min(1, dt * 10));
+  camera.position.set(px, py, pz); // rigid follow — any lerp here lags ~turnRate×τ behind while steering
   camera.lookAt(g.position.x, g.position.y + 1.5, g.position.z);
 }
-
-const v0 = new THREE.Vector3();
