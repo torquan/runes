@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Runes of Taborea</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23120d06'/%3E%3Ctext x='16' y='24' font-size='22' text-anchor='middle' fill='%238ad9ff'%3E%E1%9A%B1%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Cinzel+Decorative:wght@700;900&family=Alegreya:ital,wght@0,500;0,700;1,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game"></canvas>
+
+    <!-- world-space overlay: nameplates + floating combat text -->
+    <div id="overlay"></div>
+
+    <!-- ====================== HUD ====================== -->
+    <div id="hud" class="hidden">
+
+      <!-- player unit frame -->
+      <div id="player-frame" class="unit-frame">
+        <div class="portrait">
+          <span id="player-class-icon" class="class-icon">⚔</span>
+          <span id="player-level" class="level-badge">1</span>
+        </div>
+        <div class="frame-bars">
+          <div class="frame-name" id="player-name">Adventurer</div>
+          <div class="bar hp-bar"><div class="bar-fill" id="player-hp-fill"></div><span class="bar-text" id="player-hp-text"></span></div>
+          <div class="bar mp-bar"><div class="bar-fill" id="player-mp-fill"></div><span class="bar-text" id="player-mp-text"></span></div>
+        </div>
+      </div>
+
+      <!-- target unit frame -->
+      <div id="target-frame" class="unit-frame hidden">
+        <div class="frame-bars">
+          <div class="frame-name"><span id="target-name">—</span> <span id="target-level-tag" class="target-level"></span></div>
+          <div class="bar hp-bar"><div class="bar-fill" id="target-hp-fill"></div><span class="bar-text" id="target-hp-text"></span></div>
+        </div>
+      </div>
+
+      <!-- cast bar -->
+      <div id="cast-bar" class="hidden">
+        <div id="cast-fill"></div>
+        <span id="cast-label">Fireball</span>
+      </div>
+
+      <!-- minimap -->
+      <div id="minimap-wrap">
+        <div id="zone-name">Howling Plains</div>
+        <canvas id="minimap" width="280" height="280"></canvas>
+        <div id="clock-gold"><span id="gold-text">0</span><span class="gold-coin"></span></div>
+      </div>
+
+      <!-- quest tracker -->
+      <div id="quest-tracker">
+        <div class="tracker-title">Quest Log</div>
+        <div id="quest-entries"><div class="quest-hint">Seek out the pioneer camp…</div></div>
+      </div>
+
+      <!-- combat log -->
+      <div id="combat-log"></div>
+
+      <!-- rune pouch -->
+      <div id="rune-pouch" title="Press R to empower your weapon (+1 damage per rune)">
+        <span class="rune-glyph">ᚱ</span>
+        <span id="rune-count">0</span>
+        <span class="rune-key">R</span>
+      </div>
+
+      <!-- potion pouch -->
+      <div id="potion-pouch" title="Press Q to drink a Pioneer's Draught (35% HP, 25% MP)">
+        <span class="potion-glyph">⚗</span>
+        <span id="potion-count">0</span>
+        <span class="rune-key">Q</span>
+      </div>
+
+      <!-- action bar -->
+      <div id="action-bar-wrap">
+        <div id="xp-bar"><div id="xp-fill"></div><span id="xp-text"></span></div>
+        <div id="action-bar"></div>
+      </div>
+
+      <!-- interact prompt -->
+      <div id="interact-prompt" class="hidden"><span class="key-chip">F</span> Talk</div>
+    </div>
+
+    <!-- quest dialog -->
+    <div id="quest-dialog" class="hidden">
+      <div class="dialog-frame">
+        <div class="dialog-title" id="dialog-npc-name">Pioneer Barnaby</div>
+        <div class="dialog-body" id="dialog-text"></div>
+        <div class="dialog-objectives" id="dialog-objectives"></div>
+        <div class="dialog-rewards" id="dialog-rewards"></div>
+        <div class="dialog-buttons">
+          <button id="dialog-accept" class="btn-ornate">Accept</button>
+          <button id="dialog-close" class="btn-ornate btn-dim">Farewell</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- shop -->
+    <div id="shop-panel" class="hidden">
+      <div class="dialog-frame shop-frame">
+        <div class="dialog-title">Barnaby's Wares</div>
+        <div id="shop-gold">Your gold: <span id="shop-gold-amount">0</span><span class="gold-coin"></span></div>
+        <div id="shop-items"></div>
+        <div class="dialog-buttons"><button id="shop-close" class="btn-ornate btn-dim">Close</button></div>
+      </div>
+    </div>
+
+    <!-- death screen -->
+    <div id="death-screen" class="hidden">
+      <div class="death-title">You have been defeated</div>
+      <button id="respawn-btn" class="btn-ornate">Return to Camp</button>
+    </div>
+
+    <!-- level up splash -->
+    <div id="levelup-splash" class="hidden">
+      <div class="levelup-ring"></div>
+      <div class="levelup-text">Level <span id="levelup-num">2</span>!</div>
+    </div>
+
+    <!-- dual-class choice at level 10 -->
+    <div id="secondary-screen" class="hidden">
+      <h2 class="secondary-title">A Second Calling</h2>
+      <p class="title-sub">— as is the old custom of Taborea, choose your second class —</p>
+      <div id="secondary-cards"></div>
+    </div>
+
+    <!-- ====================== TITLE / CLASS SELECT ====================== -->
+    <div id="title-screen">
+      <div class="title-vignette"></div>
+      <div class="title-runering">ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛟᛞ</div>
+      <h1 class="game-title"><span>Runes</span><em>of</em><span>Taborea</span></h1>
+      <p class="title-sub">— choose your calling, adventurer —</p>
+      <div id="continue-wrap"></div>
+      <div id="class-select">
+        <button class="class-card" data-class="warrior">
+          <span class="card-icon">⚔</span>
+          <span class="card-name">Warrior</span>
+          <span class="card-blurb">Steel and fury. Carves through foes at arm's length.</span>
+        </button>
+        <button class="class-card" data-class="scout">
+          <span class="card-icon">➶</span>
+          <span class="card-name">Scout</span>
+          <span class="card-blurb">Eyes of the hawk. Feathers foes from afar.</span>
+        </button>
+        <button class="class-card" data-class="mage">
+          <span class="card-icon">✦</span>
+          <span class="card-name">Mage</span>
+          <span class="card-blurb">Fire and storm, bound by will alone.</span>
+        </button>
+        <button class="class-card" data-class="priest">
+          <span class="card-icon">✚</span>
+          <span class="card-name">Priest</span>
+          <span class="card-blurb">The tide answers. Mends flesh, drowns the wicked.</span>
+        </button>
+      </div>
+      <p class="title-foot">A second class awaits at level 10 — as is the old custom of Taborea.</p>
+      <p class="title-controls">WASD move · drag to look · click / Tab target · 1–4 skills · F interact</p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
