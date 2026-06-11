@@ -68,4 +68,7 @@ export const sfx = {
   // boss mechanic warnings: rising = get airborne, falling klaxon = get out
   warnJump()  { tone(440, 'square', 0.01, 0.14, 0.4); tone(660, 'square', 0.01, 0.22, 0.4, 0, 0.13); },
   warnMove()  { tone(370, 'sawtooth', 0.01, 0.14, 0.45); tone(247, 'sawtooth', 0.01, 0.22, 0.45, 0, 0.13); },
+  // sanctuary: rising two-tone sine — the inverse contour of warnMove, an
+  // invitation (get IN) not a klaxon (get out)
+  warnIn()    { tone(294, 'sine', 0.01, 0.14, 0.45); tone(440, 'sine', 0.01, 0.22, 0.45, 0, 0.13); },
 };

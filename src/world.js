@@ -356,6 +356,59 @@ export function buildWorld(scene) {
     scene.add(arena);
   }
 
+  // --- secrets: Madge's hut, the Stillest Pond, Bodo's cairn ---
+  // Hermit Madge's driftwood hut, high on the southwest rim (the climb IS the secret)
+  const MADGE = { x: -118, z: -96 };
+  {
+    const hy = heightAt(MADGE.x, MADGE.z);
+    const hutMat = new THREE.MeshLambertMaterial({ color: 0x7a6a52 });
+    const hutDark = new THREE.MeshLambertMaterial({ color: 0x4a4036 });
+    const hutBase = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.0, 2.8), hutMat);
+    hutBase.position.set(MADGE.x - 2.5, hy + 1.0, MADGE.z - 1.5);
+    hutBase.rotation.y = 0.5;
+    const hutRoof = new THREE.Mesh(new THREE.ConeGeometry(2.6, 1.6, 4), hutDark);
+    hutRoof.position.set(MADGE.x - 2.5, hy + 2.7, MADGE.z - 1.5);
+    hutRoof.rotation.y = 0.5 + Math.PI / 4;
+    hutBase.castShadow = hutRoof.castShadow = true;
+    scene.add(hutBase, hutRoof);
+  }
+
+  // the Stillest Pond — a quiet blue eye in the meadow (F to fish)
+  const POND = { x: 58, z: -72 };
+  {
+    const py = heightAt(POND.x, POND.z);
+    const water2 = new THREE.Mesh(
+      new THREE.CircleGeometry(3.2, 20),
+      new THREE.MeshLambertMaterial({ color: 0x3a6f9e, transparent: true, opacity: 0.85 })
+    );
+    water2.rotation.x = -Math.PI / 2;
+    water2.position.set(POND.x, py + 0.08, POND.z);
+    scene.add(water2);
+    const reedMat = new THREE.MeshLambertMaterial({ color: 0x4d8a35 });
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.4;
+      const rx = POND.x + Math.cos(a) * (3.4 + (i % 3) * 0.3);
+      const rz = POND.z + Math.sin(a) * (3.4 + ((i + 1) % 3) * 0.3);
+      const reed = new THREE.Mesh(new THREE.ConeGeometry(0.07, 1.1 + (i % 3) * 0.3, 4), reedMat);
+      reed.position.set(rx, heightAt(rx, rz) + 0.5, rz);
+      scene.add(reed);
+    }
+  }
+
+  // Bodo's cairn, at his old lair (a second stone joins it when his sire falls)
+  const CAIRN = { x: 94.8, z: 51.8 };
+  {
+    const cy = heightAt(CAIRN.x, CAIRN.z);
+    const cairnMat = new THREE.MeshLambertMaterial({ color: 0x6e6a60 });
+    for (let i = 0; i < 4; i++) {
+      const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.34 - i * 0.06, 0), cairnMat);
+      st.position.set(CAIRN.x, cy + 0.2 + i * 0.32, CAIRN.z);
+      st.rotation.y = i * 1.3;
+      st.castShadow = true;
+      scene.add(st);
+    }
+  }
+
   // --- campfire ember particles ---
   const EMBERS = 40;
   const emberGeo = new THREE.BufferGeometry();
@@ -391,5 +444,10 @@ export function buildWorld(scene) {
     }
   }
 
-  return { terrain, update, sunLight: sun, hemi, sky, trialArenas };
+  return {
+    terrain, update, sunLight: sun, hemi, sky, trialArenas,
+    madgePos: new THREE.Vector3(MADGE.x, heightAt(MADGE.x, MADGE.z), MADGE.z),
+    pondPos: new THREE.Vector3(POND.x, heightAt(POND.x, POND.z), POND.z),
+    cairnPos: new THREE.Vector3(CAIRN.x, heightAt(CAIRN.x, CAIRN.z), CAIRN.z),
+  };
 }

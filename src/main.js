@@ -2,11 +2,16 @@ import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { buildDungeon } from './dungeon.js';
 import { buildHighlands } from './highlands.js';
+import { buildFrostveil } from './frostveil.js';
+import { buildSanctum } from './sanctum.js';
 import { heightAt, HIGHLANDS } from './noise.js';
-import { spawnEnemies, spawnNpc, spawnGateNpc, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
+import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
 import { createPlayer, updatePlayer, CLASSES } from './player.js';
+import { freshTalents, sanitizeTalents } from './talents.js';
 import { castSkill, updateCombat, clickTarget, tabTarget, useRune, createFx } from './combat.js';
-import { createQuests, createHighlandQuests } from './quests.js';
+import { createQuests, createHighlandQuests, createFrostveilQuests, createSanctumQuests } from './quests.js';
+import { makeUnique, makeGenerated, rollUid } from './items.js';
+import { buildHumanoid } from './characters.js';
 import { createUi } from './ui.js';
 import { initAudio, sfx } from './audio.js';
 
@@ -31,19 +36,32 @@ window.addEventListener('resize', () => {
 const world = buildWorld(scene);
 const dungeon = buildDungeon(scene);
 const highlands = buildHighlands(scene);
+const frostveil = buildFrostveil(scene);
+const sanctum = buildSanctum(scene);
 const enemies = spawnEnemies(scene);
 const npc = spawnNpc(scene);
 const gateNpc = spawnGateNpc(scene);
-scene.add(npc.group, gateNpc.group);
+const { odda, fenwick } = spawnExpansionNpcs(scene);
+// Hermit Madge — no chain, no marker; just a sock and three riddles
+const madge = {
+  name: 'Hermit Madge',
+  group: buildHumanoid('npc'),
+  anim: { moving: false, speed: 1, attackT: -1, dead: false },
+};
+madge.group.position.copy(world.madgePos);
+madge.group.rotation.y = 0.9;
+scene.add(npc.group, gateNpc.group, odda.group, fenwick.group, madge.group);
 
 const game = {
-  scene, camera, renderer, world, dungeon, highlands, enemies,
-  npc, gateNpc, npcs: [npc, gateNpc],
+  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, enemies,
+  npc, gateNpc, npcs: [npc, gateNpc, odda, fenwick, madge],
   player: null,
   ui: createUi(),
   fx: createFx(scene),
   quests: createQuests(),
   highlandQuests: createHighlandQuests(),
+  frostveilQuests: createFrostveilQuests(),
+  sanctumQuests: createSanctumQuests(),
   audio: sfx,
   input: { keys: new Set(), mouseForward: false },
   classes: CLASSES,
@@ -52,6 +70,11 @@ const game = {
   slain: new Set(),
   gates: { korgrim: false, vexnar: false, morgrath: false },
 };
+// each questgiver carries its chain (nameplate markers + the F dispatch)
+npc.chain = game.quests;
+gateNpc.chain = game.highlandQuests;
+odda.chain = game.frostveilQuests;
+fenwick.chain = game.sanctumQuests;
 
 // --- zone atmosphere: golden meadow vs crypt gloom vs ashen highlands ---
 function setZone(zone) {
@@ -74,6 +97,26 @@ function setZone(zone) {
     world.hemi.color.set(0xff8050);    // warm ambient
     world.sunLight.intensity = 0.6;
     world.sunLight.color.set(0xff7a40);
+  } else if (zone === 'frostveil') {
+    scene.fog.color.set(0x121d33);     // polar night under the aurora
+    scene.fog.near = 20;
+    scene.fog.far = 95;
+    scene.background.set(0x0a1124);
+    world.sky.visible = false;         // fog + aurora ribbons are the sky
+    world.hemi.intensity = 0.35;
+    world.hemi.color.set(0x8fb0d8);
+    world.sunLight.intensity = 0.25;   // moonlight
+    world.sunLight.color.set(0xaac4e8);
+  } else if (zone === 'sanctum') {
+    scene.fog.color.set(0x0d0a1c);     // drowned astral observatory
+    scene.fog.near = 8;
+    scene.fog.far = 60;
+    scene.background.set(0x060414);
+    world.sky.visible = false;
+    world.hemi.intensity = 0.25;
+    world.hemi.color.set(0x9a96c8);
+    world.sunLight.intensity = 0.1;
+    world.sunLight.color.set(0xcfe8ff);
   } else {
     scene.fog.color.set(0xc4d4e0);
     scene.fog.near = 60;
@@ -98,9 +141,10 @@ function usePortal(portal) {
   setZone(zone);
   sfx.rune();
   game.ui.log(
-    zone === 'crypt'
-      ? 'Cold air swallows you. The Sunken Crypt does not echo — it listens.'
-      : 'Daylight. You had forgotten it had a color.',
+    portal.arriveMsg ?? (
+      zone === 'crypt'
+        ? 'Cold air swallows you. The Sunken Crypt does not echo — it listens.'
+        : 'Daylight. You had forgotten it had a color.'),
     'log-sys'
   );
   // snap the camera so it doesn't pan across the void
@@ -112,12 +156,21 @@ function usePortal(portal) {
   );
 }
 
+// every zone module may expose portals: [{x, z, label, dest, gate?, arriveMsg?}]
+function allPortals() {
+  const list = [...dungeon.portals];
+  if (game.frostveil) list.push(...game.frostveil.portals);
+  if (game.sanctum) list.push(...game.sanctum.portals);
+  return list;
+}
+
 function nearestPortal() {
   if (!game.player) return null;
   const pos = game.player.group.position;
-  for (const portal of dungeon.portals) {
+  for (const portal of allPortals()) {
     // the crypt entrance only exists once the Pale King has fallen
     if (portal.dest.zone === 'crypt' && !game.quests.reached('ossus')) continue;
+    if (portal.gate && !portal.gate(game)) continue;
     if (Math.hypot(pos.x - portal.x, pos.z - portal.z) < 4) return portal;
   }
   return null;
@@ -151,6 +204,168 @@ function updateGates() {
 game.onCast = (i) => castSkill(game, i);
 window.__game = game;
 
+// ===== secrets: Vargoth's hoard, Madge's riddles, the Stillest Pond, the Festival =====
+
+function openVault() {
+  const p = game.player;
+  if (p.secrets.vault || !p.alive) return;
+  p.secrets.vault = true;
+  dungeon.openChest();
+  sfx.loot();
+  game.fx.burst(p.group.position, 0xffd76e, 30);
+  p.gainGold(game, 25000);
+  p.runes += 5;
+  p.addItem(game, makeUnique('vargoth_vault'));
+  game.ui.log("Vargoth's hoard: a king's gold, five runes, and a spare crown. He had spares. Of course he had spares.", 'log-loot-legendary');
+  game.save();
+}
+
+// --- Hermit Madge: three riddles, one pebble ---
+const RIDDLES = [
+  { q: 'No legs, but it outruns every hero. No mouth, but every camp in Taborea feeds it nightly. What is it?',
+    options: ['A fire', 'A wolf', 'A river'], answer: 0 },
+  { q: 'The more of it you take, the more you leave behind.',
+    options: ['Gold', 'Footsteps', 'Potions'], answer: 1 },
+  { q: 'Every hero in this valley has killed it a hundred times, and it has never once died.',
+    options: ['A boar', 'Vargoth', 'Time'], answer: 0 },
+];
+
+function openMadgeDialog() {
+  const ui = game.ui;
+  const s = game.player.secrets;
+  if (s.riddles >= 3) {
+    ui.showDialog({
+      title: 'Hermit Madge',
+      text: 'The pebble knows the way home. So do you. Off with you — the sock and I are at a delicate juncture.',
+      buttons: [{ label: 'Farewell', action: () => ui.hideDialog() }],
+    });
+    return;
+  }
+  const r = RIDDLES[s.riddles];
+  const lead = s.riddles === 0
+    ? 'Forty years I have knitted this sock, and you are the first to climb all the way up here. Heroes. Always climbing. Well then — earn the view. '
+    : 'Another, then. ';
+  ui.showDialog({
+    title: 'Hermit Madge',
+    text: lead + r.q,
+    buttons: [
+      ...r.options.map((label, i) => ({
+        label,
+        action: () => {
+          if (i !== r.answer) {
+            ui.showDialog({
+              title: 'Hermit Madge',
+              text: 'No. Sit with it. The sock and I have all day.',
+              buttons: [
+                { label: 'Think again', primary: true, action: () => openMadgeDialog() },
+                { label: 'Leave', action: () => ui.hideDialog() },
+              ],
+            });
+            return;
+          }
+          s.riddles++;
+          sfx.quest();
+          if (s.riddles >= 3) {
+            const p = game.player;
+            p.runes += 5;
+            p.addItem(game, makeUnique('madge'));
+            ui.hideDialog();
+            ui.log('Madge: "Aye. They come back. They ALWAYS come back. Why do you think I live up here?"', 'log-quest');
+            ui.log("Madge presses a perfectly ordinary pebble into your hand. (+5 runes, Madge's Lucky Pebble)", 'log-loot-legendary');
+            game.fx.burst(p.group.position, 0xffd76e, 26);
+            game.save();
+          } else {
+            ui.log('Madge nods slowly, needles never stopping.', 'log-quest');
+            openMadgeDialog();
+          }
+        },
+      })),
+      { label: 'Not now', action: () => ui.hideDialog() },
+    ],
+  });
+}
+
+// --- the Stillest Pond: fishing for junk (and one absurd legendary) ---
+const JUNK_CATCHES = [
+  ['Old Boot', 'Left.'],
+  ['A Different Old Boot', 'Also left.'],
+  ['Soggy Plank', 'Load-bearing, somewhere.'],
+  ['Surprisingly Angry Minnow', 'It will remember this.'],
+];
+let fishing = null;     // { t, dur } while the line is out
+let fishingCd = 0;
+
+function startFishing() {
+  const p = game.player;
+  if (!p.alive || fishing || fishingCd > 0 || p.casting) return;
+  fishing = { t: 0, dur: 3 };
+  game.ui.showCastBar('Fishing…');
+}
+
+function resolveCatch() {
+  const p = game.player;
+  fishingCd = 4;
+  const roll = Math.random();
+  if (roll < 0.005) {
+    const carp = makeUnique('carp');
+    p.addItem(game, carp);
+    game.ui.log('Something enormous takes the line — the CARP OF A THOUSAND REGRETS is yours!', 'log-loot-legendary');
+    game.ui.floatText(p.group.position, carp.name, 'loot-legendary');
+    game.fx.burst(p.group.position, 0xff9a30, 30);
+    sfx.levelup();
+  } else if (roll < 0.4) {
+    p.gainGold(game, 5 + Math.floor(Math.random() * 21));
+  } else {
+    const [name, flavor] = JUNK_CATCHES[Math.floor(Math.random() * JUNK_CATCHES.length)];
+    p.addItem(game, { uid: rollUid(), id: 'junk', name, slot: 'trinket', rarity: 'common', stats: {}, value: 5, ilvl: 0, unique: false, flavor });
+    game.ui.log(`You catch: ${name}.`, 'log-loot-common');
+    sfx.loot();
+  }
+  game.save();
+}
+
+// --- the Festival of the Boar (↑↑↓↓←→←→BA): purely cosmetic ---
+const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+let konamiIdx = 0;
+let festivalT = 0;
+let festivalHats = [];
+
+function partyHat() {
+  const geo = new THREE.ConeGeometry(0.18, 0.45, 8);
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    c.setHSL(((pos.getY(i) + 0.225) / 0.45) * 0.9, 0.9, 0.6);
+    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true }));
+}
+
+function festivalOfTheBoar() {
+  if (festivalT > 0) return;
+  festivalT = 60;
+  festivalHats = [];
+  for (const e of game.enemies) {
+    if (!e.alive || !['boar', 'boss', 'thunderbristle'].includes(e.kind)) continue;
+    const hat = partyHat();
+    const rig = e.group.userData.rig;
+    const mountPt = rig && rig.headPivot ? rig.headPivot : e.group;
+    mountPt.add(hat);
+    hat.position.y = 0.5;
+    festivalHats.push(hat);
+  }
+  const pHat = partyHat();
+  game.player.group.userData.rig.headPivot.add(pHat);
+  pHat.position.y = 0.62;
+  festivalHats.push(pHat);
+  const confetti = [0xff5a8a, 0xffd76e, 0x8aff9d, 0x8ad9ff, 0xb08aff, 0xff9a30];
+  confetti.forEach((col, i) => setTimeout(() => game.fx.burst(game.player.group.position, col, 18), i * 120));
+  sfx.levelup();
+  game.ui.log('The old words are spoken. Somewhere far away, a developer feels a disturbance — and approves. The boars are celebrating.', 'log-quest');
+}
+
 // --- save system ---
 const SAVE_KEY = 'runes-of-taborea-save';
 
@@ -171,7 +386,7 @@ game.save = () => {
   if (!game.player || saveBlocked) return;
   const p = game.player;
   localStorage.setItem(SAVE_KEY, JSON.stringify({
-    v: 3,
+    v: 4,
     classId: p.classId, secondaryId: p.secondaryId,
     level: p.level, xp: p.xp, gold: p.gold,
     runes: p.runes, runeBonus: p.runeBonus,
@@ -181,9 +396,13 @@ game.save = () => {
     equipped: p.equipped,
     talents: p.talents,
     spent: p.talentSpent(),     // derived; written for forward-compat, recomputed on load
+    mount: p.mount, glow: p.glow,
+    secrets: p.secrets,
     slain: [...game.slain],
     quests: game.quests.serialize(),
     highlandQuests: game.highlandQuests.serialize(),
+    frostveilQuests: game.frostveilQuests.serialize(),
+    sanctumQuests: game.sanctumQuests.serialize(),
   }));
 };
 
@@ -192,9 +411,43 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    return s && (s.v === 1 || s.v === 2 || s.v === 3) && CLASSES[s.classId] ? s : null;
+    return s && [1, 2, 3, 4].includes(s.v) && CLASSES[s.classId] ? s : null;
   } catch { return null; }
 }
+
+// console helper: a level-90 post-Pyraxis hero at the expansion gate (v4 save)
+window.__veteran2 = (classId = 'warrior') => {
+  if (!CLASSES[classId]) { console.warn('classes:', Object.keys(CLASSES).join(', ')); return; }
+  const done = (id, n) => [id, { status: 'done', progress: n }];
+  localStorage.setItem(SAVE_KEY, JSON.stringify({
+    v: 4, classId, secondaryId: null,
+    level: 90, xp: 0,
+    gold: 250000, runes: 40, runeBonus: 30,
+    potions: 25, trainDmg: 0, trainHp: 0, trainCrit: 0, boots: true,
+    mount: false, glow: false,
+    inventory: [],
+    equipped: { weapon: null, armor: null, trinket: null, relic: null },  // the relic chase, from zero
+    talents: { onslaught: 0, bulwark: 0, pathfinder: 0, choices: {}, mastery: null },  // 81 points derive
+    secrets: { vault: false, riddles: 0 },
+    slain: ['boss', 'banditking', 'korgrim', 'vexnar', 'morgrath', 'ossus', 'vargoth', 'emberlord', 'pyraxis'],
+    quests: { quests: Object.fromEntries([
+      done('boars', 6), done('wolves', 4), done('boss', 1), done('bandits', 6), done('banditking', 1),
+      done('korgrim', 1), done('vexnar', 1), done('morgrath', 1), done('ossus', 1), done('vargoth', 1),
+    ]), bounty: { status: 'ready', progress: 0 } },
+    highlandQuests: { quests: Object.fromEntries([
+      done('h_cinders', 6), done('h_packs', 8), done('h_emberlord', 1), done('h_pyraxis', 1),
+    ]), bounty: { status: 'ready', progress: 0 } },
+    // frostveil/sanctum chains intentionally absent -> fresh expansion
+  }));
+  location.reload();
+};
+
+// console helper: conjure a generated item into the bag, e.g. __give('relic', 'epic')
+window.__give = (slot = 'relic', rarity = 'epic', ilvl) => {
+  if (!game.player) return;
+  game.player.addItem(game, makeGenerated(slot, rarity, ilvl ?? game.player.level));
+  game.save();
+};
 
 // console helper: restore a pre-save-system hero, e.g. __veteran('scout')
 window.__veteran = (classId = 'warrior') => {
@@ -217,6 +470,10 @@ window.addEventListener('keydown', (e) => {
   if (!game.started || e.repeat) return;
   game.input.keys.add(e.code);
 
+  // the old words (↑↑↓↓←→←→BA) — see festivalOfTheBoar
+  konamiIdx = e.code === KONAMI[konamiIdx] ? konamiIdx + 1 : (e.code === KONAMI[0] ? 1 : 0);
+  if (konamiIdx === KONAMI.length) { konamiIdx = 0; festivalOfTheBoar(); }
+
   if (e.code === 'Tab') { e.preventDefault(); tabTarget(game); }
   if (e.code.startsWith('Digit')) {
     const n = parseInt(e.code.slice(5), 10);
@@ -232,14 +489,24 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { e.preventDefault(); game.player.tryJump(); }
   if (e.code === 'KeyF') {
     const p = game.player.group.position;
-    const dNpc = p.distanceTo(npc.group.position);
-    const dGate = p.distanceTo(gateNpc.group.position);
-    if (dNpc < 5 && dNpc <= dGate) {
-      game.quests.openDialog(game);              // Barnaby
-    } else if (dGate < 5) {
-      game.highlandQuests.openDialog(game);      // Emberwarden Kaska
+    // nearest questgiver within 5 wins; then the secrets; then portals
+    let bestChain = null, bestD = 5;
+    for (const n of game.npcs) {
+      if (!n.chain) continue;
+      const d = p.distanceTo(n.group.position);
+      if (d < bestD) { bestChain = n.chain; bestD = d; }
+    }
+    if (bestChain) {
+      bestChain.openDialog(game);
+    } else if (p.distanceTo(madge.group.position) < 5) {
+      openMadgeDialog();
+    } else if (game.zone === 'crypt' && !game.player.secrets.vault &&
+               Math.hypot(p.x - dungeon.chestPos.x, p.z - dungeon.chestPos.z) < 4) {
+      openVault();
+    } else if (game.zone === 'world' && p.distanceTo(world.pondPos) < 4.5) {
+      startFishing();
     } else {
-      const portal = nearestPortal();            // crypt is still a walk-in/portal pocket
+      const portal = nearestPortal();
       if (portal && game.player.alive) usePortal(portal);
     }
   }
@@ -367,19 +634,40 @@ function startGame(classId, saved) {
     p.trainCrit = saved.trainCrit ?? 0;
     p.boots = saved.boots ?? false;
     p.inventory = saved.inventory ?? [];
-    p.equipped = saved.equipped ?? { weapon: null, armor: null, trinket: null };
-    // migrate partial equipped (v2/old v3) so all three keys exist:
-    p.equipped.weapon ??= null; p.equipped.armor ??= null; p.equipped.trinket ??= null;
-    // talents: default-fill on any save lacking them (v1/v2/old-v3); ignore stored `spent` (recomputed)
-    p.talents = saved.talents ?? { onslaught: 0, bulwark: 0, pathfinder: 0 };
-    p.talents.onslaught ??= 0; p.talents.bulwark ??= 0; p.talents.pathfinder ??= 0;
+    p.equipped = saved.equipped ?? { weapon: null, armor: null, trinket: null, relic: null };
+    // migrate partial equipped (v2/v3) so all four keys exist:
+    p.equipped.weapon ??= null; p.equipped.armor ??= null;
+    p.equipped.trinket ??= null; p.equipped.relic ??= null;
+    // talents v4: { ranks×3, choices, mastery }. Anything older gets THE GREAT
+    // UNLEARNING — a full refund (points are derived, so zeroing IS the refund).
+    if (saved.v >= 4 && saved.talents && saved.talents.choices) {
+      p.talents = sanitizeTalents(saved.talents);
+    } else {
+      const hadSpent = saved.talents &&
+        ((saved.talents.onslaught || 0) + (saved.talents.bulwark || 0) + (saved.talents.pathfinder || 0)) > 0;
+      p.talents = freshTalents();
+      if (hadSpent) {
+        setTimeout(() => {
+          game.ui.log('A great unlearning sweeps Taborea — the talent paths have been redrawn, and they run twice as deep.', 'log-quest');
+          game.ui.log(`All ${Math.max(0, saved.level - 9)} of your talent points have been returned. Press T — this time, you must choose.`, 'log-quest');
+          game.ui.nudgeTalentBadge();
+        }, 1600);
+      }
+    }
+    p.mount = saved.mount ?? false;
+    p.glow = saved.glow ?? false;
+    p.secrets = saved.secrets ?? { vault: false, riddles: 0 };
+    p.secrets.vault ??= false; p.secrets.riddles ??= 0;
     if (saved.secondaryId) p.chooseSecondary(game, saved.secondaryId, true);
     p.recalcStats();
     p.hp = p.maxHp;
     p.mp = p.maxMp;
     game.quests.load(saved.quests);
     game.highlandQuests.load(saved.highlandQuests);   // no-ops on undefined (old saves)
+    game.frostveilQuests.load(saved.frostveilQuests);
+    game.sanctumQuests.load(saved.sanctumQuests);
     game.slain = new Set(saved.slain ?? []);
+    if (p.secrets.vault) dungeon.openChest();         // the hoard stays plundered
   }
 
   game.ui.buildActionBar(game, game.onCast);
@@ -424,17 +712,30 @@ function tick() {
     updateCombat(game, dt);
     world.update(dt, elapsed, game.player.group.position);
     highlands.update(elapsed);
+    frostveil.update(elapsed, game);
+    sanctum.update(elapsed);
 
-    const npcDist = updateNpc(npc, game, elapsed);
-    const gateDist = updateNpc(gateNpc, game, elapsed);
+    let npcDist = Infinity;
+    for (const n of game.npcs) npcDist = Math.min(npcDist, updateNpc(n, game, elapsed));
     const portal = nearestPortal();
     const p = game.player.group.position;
     const nearSign = p.distanceTo(highlands.signPos) < 6 && p.x < HIGHLANDS.GATE_X;
+    const frostSign = game.player.alive &&
+      frostveil.signs.find((s) => Math.hypot(p.x - s.x, p.z - s.z) < 6);
+    const nearPond = game.zone === 'world' && p.distanceTo(world.pondPos) < 4.5;
+    const nearChest = game.zone === 'crypt' && !game.player.secrets.vault &&
+      Math.hypot(p.x - dungeon.chestPos.x, p.z - dungeon.chestPos.z) < 4;
 
-    if (game.player.alive && (npcDist < 5 || gateDist < 5) && !game.ui.dialogOpen()) {
+    if (game.player.alive && npcDist < 5 && !game.ui.dialogOpen()) {
       game.ui.setInteractPrompt(true, 'Talk');
+    } else if (nearChest && game.player.alive) {
+      game.ui.setInteractPrompt(true, "Open Vargoth's hoard");
+    } else if (nearPond && game.player.alive && !fishing) {
+      game.ui.setInteractPrompt(true, 'Fish');
     } else if (nearSign && !game.ui.dialogOpen()) {
       game.ui.setInteractPrompt(true, 'The Ashen Highlands — recommended level 55+');
+    } else if (frostSign && !game.ui.dialogOpen()) {
+      game.ui.setInteractPrompt(true, frostSign.label);
     } else if (portal && game.player.alive) {
       game.ui.setInteractPrompt(true, portal.label);
     } else {
@@ -448,6 +749,62 @@ function tick() {
       game.ui.log('A scorched signpost: "AHEAD — THE ASHEN HIGHLANDS. Cinders, wyrms, and worse. Turn back unless you have seen fifty-five summers (level 55)."', 'log-quest');
     }
 
+    // expansion cues + secret hints (all one-time per session)
+    if (!game._archCracked && (game.slain.has('pyraxis') || game.player.level >= 78)) {
+      game._archCracked = true;
+      game.ui.log('Far to the west, something cracks like spring ice…', 'log-quest');
+    }
+    if (!game._fissureWoke && game.slain.has('hrimnir')) {
+      game._fissureWoke = true;
+      game.ui.log('Beneath the tarn, gold light wakes. The fissure is breathing.', 'log-quest');
+    }
+    if (!game._hintVault && game.zone === 'crypt' &&
+        Math.hypot(p.x - dungeon.thronePos.x, p.z - dungeon.thronePos.z) < 4) {
+      game._hintVault = true;
+      game.ui.log("The wall behind Vargoth's throne does not echo like the others.", 'log-sys');
+    }
+    if (p.distanceTo(world.cairnPos) < 4) {
+      if (!game._cairnSeen) {
+        game._cairnSeen = true;
+        game.ui.log('A small cairn, lovingly stacked: "BODO — He ravaged."', 'log-sys');
+      } else if (!game._cairnSeen2 && game.slain.has('thunderbristle')) {
+        game._cairnSeen2 = true;
+        game.ui.log('The cairn has a second, much larger stone now.', 'log-sys');
+      }
+    }
+
+    // fishing line out: moving (or casting a real spell) cancels, patience pays
+    fishingCd = Math.max(0, fishingCd - dt);
+    if (fishing) {
+      if (!game.player.alive || game.player.anim.moving || game.player.casting) {
+        fishing = null;
+        game.ui.hideCastBar();
+        game.ui.log('The line snaps back. The pond forgives.', 'log-sys');
+      } else {
+        fishing.t += dt;
+        game.ui.updateCastBar(fishing.t / fishing.dur);
+        if (fishing.t >= fishing.dur) {
+          fishing = null;
+          game.ui.hideCastBar();
+          resolveCatch();
+        }
+      }
+    }
+
+    // festival hats melt away after a minute (dispose — convention for transients)
+    if (festivalT > 0) {
+      festivalT -= dt;
+      if (festivalT <= 0) {
+        for (const h of festivalHats) {
+          h.parent?.remove(h);
+          h.geometry.dispose();
+          h.material.dispose();
+        }
+        festivalHats = [];
+        game.ui.log('The festival ends, as festivals do. The boars pretend it never happened.', 'log-sys');
+      }
+    }
+
     dungeon.update(elapsed);
     game.fx.update(dt);
     game.ui.update(game);
@@ -458,9 +815,10 @@ function tick() {
     camera.lookAt(0, 2, 0);
     world.update(dt, elapsed, null);
     highlands.update(elapsed);
+    frostveil.update(elapsed, null);
+    sanctum.update(elapsed);
     const fakeGame = { player: { group: { position: camera.position } } };
-    updateNpc(npc, fakeGame, elapsed);
-    updateNpc(gateNpc, fakeGame, elapsed);
+    for (const n of game.npcs) updateNpc(n, fakeGame, elapsed);
   }
 
   renderer.render(scene, camera);

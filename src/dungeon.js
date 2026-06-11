@@ -24,7 +24,11 @@ const WALLS = [
   // throne room (326..346, -11..11)
   [326, -11, 346, -10], [326, 10, 346, 11],
   [326, -11, 327, -2], [326, 2, 327, 11],
-  [345, -11, 346, 11],
+  // east wall SPLIT around z ∈ [-2,2]: the gap behind the throne is real, the
+  // stone that appears to fill it is not (see the illusory door below)
+  [345, -11, 346, -2], [345, 2, 346, 11],
+  // the Hollow Wall vault (346..356, ±7) — Vargoth's hoard
+  [346, -7, 356, -6], [346, 6, 356, 7], [355, -7, 356, 7],
 ];
 
 export function buildDungeon(scene) {
@@ -103,6 +107,39 @@ export function buildDungeon(scene) {
   skull.position.set(344.4, F + 4.5, 0);
   group.add(throneSeat, throneBack, skull);
 
+  // ---- the Hollow Wall (secret): an illusory door behind the throne ----
+  // Looks exactly like the east wall but has NO collision AABB — walking
+  // straight through it is the reveal. The vault behind holds Vargoth's hoard.
+  const illusoryDoor = new THREE.Mesh(new THREE.BoxGeometry(1, WALL_H, 4), stone);
+  illusoryDoor.position.set(345.5, F + WALL_H / 2, 0);
+  group.add(illusoryDoor);
+  // vault dressing: one green light, a skeleton on a comically small throne
+  const vaultLight = new THREE.PointLight(0x66ff88, 24, 22, 1.6);
+  vaultLight.position.set(351, F + 4, 0);
+  group.add(vaultLight);
+  const tinyThrone = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.7), darkStone);
+  tinyThrone.position.set(353, F + 0.25, 4);
+  const tinyBack = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.4, 0.8), darkStone);
+  tinyBack.position.set(353.35, F + 0.7, 4);
+  const sitter = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.8, 0.4), bone);
+  sitter.position.set(353, F + 0.9, 4);
+  const sitterSkull = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), bone);
+  sitterSkull.position.set(353, F + 1.45, 4);
+  group.add(tinyThrone, tinyBack, sitter, sitterSkull);
+  // the hoard chest — F-interactable (main.js), opens once per hero
+  const chestBase = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 0.9),
+    new THREE.MeshLambertMaterial({ color: 0x6e4a26 }));
+  chestBase.position.set(352, F + 0.4, 0);
+  const chestLid = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.3, 0.9),
+    new THREE.MeshLambertMaterial({ color: 0x8a6a3e }));
+  chestLid.position.set(352, F + 0.95, 0);
+  const chestGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6),
+    new THREE.MeshBasicMaterial({ color: 0xffd76e, transparent: true, opacity: 0.0, side: THREE.DoubleSide }));
+  chestGlow.rotation.x = -Math.PI / 2;
+  chestGlow.position.set(352, F + 0.82, 0);
+  chestBase.castShadow = true;
+  group.add(chestBase, chestLid, chestGlow);
+
   // ---- portals ----
   const portalMat = new THREE.MeshBasicMaterial({
     color: 0x8ad9ff, transparent: true, opacity: 0.65, side: THREE.DoubleSide,
@@ -137,6 +174,13 @@ export function buildDungeon(scene) {
   return {
     walls: wallBoxes,
     entrance,
+    chestPos: { x: 352, z: 0 },
+    thronePos: { x: 343.5, z: 0 },
+    openChest() {
+      chestLid.rotation.x = -1.1;          // lid thrown back
+      chestLid.position.set(352, F + 1.1, -0.35);
+      chestGlow.material.opacity = 0.65;   // gold light spills out
+    },
     portals: [
       { x: ex, z: ez, label: 'Enter the Sunken Crypt', dest: { x: 263, z: 0, zone: 'crypt' } },
       { x: 260.2, z: 0, label: 'Leave the crypt', dest: { x: -27, z: 33, zone: 'world' } },

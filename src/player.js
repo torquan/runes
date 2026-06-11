@@ -1,10 +1,15 @@
 import * as THREE from 'three';
-import { heightAt, HIGHLANDS } from './noise.js';
-import { buildHumanoid, animateHumanoid } from './characters.js';
+import { heightAt, HIGHLANDS, ZONE_BOUNDS } from './noise.js';
+import { buildHumanoid, animateHumanoid, buildBoar, animateBeast } from './characters.js';
 import { totalEquippedStats } from './items.js';
 import { spentTotal, dmgMult, critAdd, hpMult, healRecvMult,
          speedMult, potionMult, potionCdReduction, activeCapstones,
-         TALENT_UNLOCK_LEVEL } from './talents.js';
+         TALENT_UNLOCK_LEVEL, BRANCH_CAP, MASTERY_THRESHOLD, MASTERIES,
+         freshTalents, nextRankIsChoice, choiceNodeFor, choiceIs,
+         regenBonus, manaRegenMult, stoneformReduction, masteryEligible,
+         UNDYING_CD, UNDYING_FLOOR, BRAMBLE_PCT, SATCHEL_CHANCE,
+         LIVING_STONE_PCT, TRAILWIND_MULT, SLIPSTREAM_MULT, SKYSTEP_MULT } from './talents.js';
+import { reflectDamage } from './combat.js';
 
 export const CLASSES = {
   warrior: {
@@ -92,18 +97,43 @@ export const SHOP = [
     buy: (p) => { p.boots = true; p.recalcStats(); },
   },
   {
+    id: 'mount', name: 'Saddle of the Howling Plains', icon: '♘',
+    desc: 'A great golden boar — +60% speed out of combat. Bodo would have wanted this. Bodo would have wanted to BE this.',
+    price: () => 150000,
+    soldOut: (p) => p.mount,
+    owned: (p) => (p.mount ? 'stabled at your heels' : ''),
+    buy: (p) => { p.mount = true; },
+  },
+  {
+    id: 'glow', name: 'Phial of Starlight', icon: '✨',
+    desc: 'Distilled night sky. Purely decorative. Heroes deserve to glitter.',
+    price: () => 40000,
+    soldOut: (p) => p.glow,
+    owned: (p) => (p.glow ? 'drunk; permanently sparkling' : ''),
+    buy: (p) => { p.glow = true; },
+  },
+  {
     id: 'respec', name: 'Tome of Unlearning', icon: '📖',
-    desc: 'Forget all talents and reclaim every point. Price scales with what you have spent.',
-    price: (p) => Math.max(0, p.talentSpent()) * 100,
-    owned: (p) => (p.talentSpent() ? `${p.talentSpent()} points spent` : 'nothing to unlearn'),
-    soldOut: (p) => p.talentSpent() === 0,          // disables the buy button at 0 spent
+    desc: 'Forget all talents and reclaim every point. Price scales with what you have spent — breaking a sworn Oath costs 5,000 extra.',
+    price: (p) => Math.max(0, p.talentSpent()) * 100 + (p.talents.mastery ? 5000 : 0),
+    owned: (p) => {
+      if (!p.talentSpent() && !p.talents.mastery) return 'nothing to unlearn';
+      const oath = p.talents.mastery ? ' · an Oath sworn' : '';
+      return `${p.talentSpent()} points spent${oath}`;
+    },
+    soldOut: (p) => p.talentSpent() === 0 && !p.talents.mastery,
     buy: (p) => { /* handled specially in ui.showShop — see §5e */ },
   },
 ];
 
 export function createPlayer(classId, scene) {
   const cls = CLASSES[classId];
-  const group = buildHumanoid(classId);
+  // outer group owns position/rotation/physics; the humanoid rides inside it
+  // so the mount can lift the body without touching any movement math
+  const body = buildHumanoid(classId);
+  const group = new THREE.Group();
+  group.add(body);
+  group.userData = body.userData;   // rig + height pass through (animateHumanoid, plates)
   group.position.set(5, heightAt(5, 10), 10);
   group.rotation.y = Math.PI; // face the camp
   scene.add(group);
@@ -118,16 +148,19 @@ export function createPlayer(classId, scene) {
   scene.add(ring);
 
   const player = {
-    classId, cls, group, ring,
+    classId, cls, group, body, ring,
     secondaryId: null, secondary: null,
     name: cls.name,
     level: 1, xp: 0,
     maxHp: 0, hp: 0, maxMp: 0, mp: 0,
     gold: 0, runes: 0, runeBonus: 0,
     potions: 0, potionCd: 0, trainDmg: 0, trainHp: 0, trainCrit: 0, boots: false,
+    mount: false, mountMesh: null,        // Saddle of the Howling Plains
+    glow: false, glowOff: false, _glowT: 0, // Phial of Starlight
+    secrets: { vault: false, riddles: 0 },
     inventory: [],            // Item[]
-    equipped: { weapon: null, armor: null, trinket: null },
-    talents: { onslaught: 0, bulwark: 0, pathfinder: 0 },   // points spent per branch
+    equipped: { weapon: null, armor: null, trinket: null, relic: null },
+    talents: freshTalents(),  // { onslaught, bulwark, pathfinder, choices, mastery }
     alive: true,
     speed: 6.5,
     vy: 0, onGround: true,
@@ -137,6 +170,12 @@ export function createPlayer(classId, scene) {
     cooldowns: {},
     casting: null,
     stoneformT: 0,   // >0 = Stoneform active (damage reduction window)
+    // transient talent buff timers — runtime only, never saved
+    spreeT: 0,       // Killing Spree damage window
+    avengerT: 0,     // Avenger's Pact damage window (set by entities.js on dodge)
+    slipstreamT: 0,  // post-dash speed window
+    skystepT: 0,     // Skystep landing speed window
+    undyingCd: 0,    // Undying Will internal cooldown
     combatTimer: 0, // >0 means "in combat"
     cam: { yaw: 0, pitch: 0.42, dist: 10 },
 
@@ -195,7 +234,12 @@ export function createPlayer(classId, scene) {
       if (!this.alive) return;
       if (this.potions <= 0) { game.ui.log('You have no draughts left — Barnaby sells them.', 'log-sys'); return; }
       if (this.potionCd > 0) return;
-      this.potions--;
+      // Bottomless Satchel: sometimes the draught refills itself
+      if (choiceIs(this.talents, 'pathfinder', 21, 'satchel') && Math.random() < SATCHEL_CHANCE) {
+        game.ui.log('The empty phial refills itself. Bottomless, as advertised.', 'log-loot');
+      } else {
+        this.potions--;
+      }
       this.potionCd = Math.max(2, 12 - potionCdReduction(this.talents));
       const potMul = potionMult(this.talents);            // Pathfinder Alchemy
       const healRecv = healRecvMult(this.talents);        // Bulwark Mending
@@ -275,11 +319,14 @@ export function createPlayer(classId, scene) {
       game.save?.();
     },
 
-    // pour one point into a branch (fill order lives in talents.js math)
+    // pour one point into a branch (fill order lives in talents.js math).
+    // Returns 'choice' WITHOUT spending when the next rank is a choice node —
+    // the panel then renders the picker and chooseTalent() does the real spend.
     spendTalent(game, branch) {
       if (this.talentPoints() <= 0) return false;
-      if (!(branch in this.talents)) return false;
-      if (this.talents[branch] >= 15) { game.ui.log('That path is fully walked.', 'log-sys'); return false; }
+      if (!(branch in this.talents) || branch === 'choices' || branch === 'mastery') return false;
+      if (this.talents[branch] >= BRANCH_CAP) { game.ui.log('That path is fully walked.', 'log-sys'); return false; }
+      if (nextRankIsChoice(this.talents, branch)) return 'choice';
       this.talents[branch]++;
       this.recalcStats();
       this.hp = Math.min(this.hp, this.maxHp);     // Bulwark grows the pool; do NOT free-heal the difference
@@ -291,28 +338,86 @@ export function createPlayer(classId, scene) {
       return true;
     },
 
-    respecTalents(game) {
-      this.talents = { onslaught: 0, bulwark: 0, pathfinder: 0 };
+    // resolve a choice node: atomically spends the point AND records the pick
+    chooseTalent(game, branch, optionId) {
+      if (this.talentPoints() <= 0) return false;
+      const rank = this.talents[branch];
+      if (rank !== 10 && rank !== 20) return false;
+      const node = choiceNodeFor(branch, rank + 1);
+      if (!node || !node.options.some((o) => o.id === optionId)) return false;
+      const picked = node.options.find((o) => o.id === optionId);
+      const other = node.options.find((o) => o.id !== optionId);
+      this.talents[branch]++;
+      this.talents.choices[branch + (rank + 1)] = optionId;
       this.recalcStats();
       this.hp = Math.min(this.hp, this.maxHp);
+      game.audio.quest();
+      game.fx.burst(this.group.position, 0xffd76e, 20);
+      game.ui.log(`You choose ${picked.name}; ${other.name} is forsaken.`, 'log-quest');
+      game.ui.buildActionBar(game, game.onCast);
+      game.ui.refreshTalentBadge(game);
+      game.save?.();
+      return true;
+    },
+
+    // swear the one Mastery Oath — free, exclusive, respec-only undo
+    swearMastery(game, branch) {
+      if (!masteryEligible(this.talents, branch)) return false;
+      this.talents.mastery = branch;
+      this.recalcStats();
+      this.hp = Math.min(this.hp, this.maxHp);
+      game.audio.levelup();
+      game.fx.burst(this.group.position, 0xffd76e, 40);
+      game.ui.log(`The oath is sworn: ${MASTERIES[branch].name}. There is no second oath.`, 'log-quest');
+      game.ui.buildActionBar(game, game.onCast);    // capstone upgrades in place
+      game.ui.refreshTalentBadge(game);
+      game.save?.();
+      return true;
+    },
+
+    respecTalents(game) {
+      this.talents = freshTalents();
+      this.recalcStats();
+      this.hp = Math.min(this.hp, this.maxHp);
+      // zero every transient talent timer so a respec leaves no ghost buffs
       this.stoneformT = 0;
+      this.spreeT = 0; this.avengerT = 0;
+      this.slipstreamT = 0; this.skystepT = 0; this.undyingCd = 0;
       // drop any capstone cooldowns so a respec doesn't leave ghost CDs
       for (const id of ['cap_execute', 'cap_stoneform', 'cap_dash']) delete this.cooldowns[id];
       game.ui.buildActionBar(game, game.onCast);
       game.ui.refreshTalentBadge(game);
-      game.ui.log('Your talents unravel. Choose your path anew.', 'log-quest');
+      game.ui.log('Your talents unravel. Choose your paths anew.', 'log-quest');
       game.save?.();
     },
 
     takeDamage(game, dmg, source) {
       if (!this.alive) return;
-      if (this.stoneformT > 0) dmg = Math.max(1, Math.round(dmg * 0.5));   // Stoneform: 50% less
+      // Stoneform: the one sanctioned DR window (60% with the Mountain oath)
+      if (this.stoneformT > 0) dmg = Math.max(1, Math.round(dmg * stoneformReduction(this.talents)));
       this.hp -= dmg;
       this.combatTimer = 5;
       game.ui.floatText(this.group.position, `-${dmg}`, 'incoming');
       game.ui.log(`${source.name} hits you for ${dmg}.`, 'log-in');
       game.audio.hurt();
+      // thorns: Bramble Ward (passive 15%) and Worldstone Bulwark (20% in-window)
+      if (source && source.alive && source.type) {
+        let reflect = 0;
+        if (choiceIs(this.talents, 'bulwark', 11, 'bramble')) reflect += BRAMBLE_PCT;
+        if (this.stoneformT > 0 && this.talents.mastery === 'bulwark') reflect += 0.2;
+        if (reflect > 0) reflectDamage(game, source, Math.max(1, Math.round(dmg * reflect)));
+      }
       if (this.hp <= 0) {
+        // Undying Will: one bought mistake per 3 minutes, not a mitigation stat
+        if (choiceIs(this.talents, 'bulwark', 11, 'undying') && this.undyingCd <= 0) {
+          this.hp = Math.max(1, Math.round(this.maxHp * UNDYING_FLOOR));
+          this.undyingCd = UNDYING_CD;
+          game.ui.floatText(this.group.position, 'UNDYING WILL!', 'heal');
+          game.ui.log('Death reaches for you — and your will refuses. (180s)', 'log-heal');
+          game.audio.rune();
+          game.fx.burst(this.group.position, 0x9ad0ff, 30);
+          return;
+        }
         this.hp = 0;
         this.die(game);
       }
@@ -356,6 +461,7 @@ export function createPlayer(classId, scene) {
         game.ui.levelUpSplash(this.level);
         game.ui.log(`You have reached level ${this.level}!`, 'log-quest');
         game.fx.burst(this.group.position, 0xffd76e, 26);
+        if (this.glow && !this.glowOff) game.fx.burst(this.group.position, this.cls.skills[0].color, 26);
         if (this.level >= 10 && !this.secondary) {
           game.ui.log('A second calling stirs within you…', 'log-quest');
           game.ui.showSecondaryChoice(game);
@@ -396,13 +502,25 @@ export function updatePlayer(game, dt, elapsed) {
   player.combatTimer = Math.max(0, player.combatTimer - dt);
   if (player.alive) {
     const inCombat = player.combatTimer > 0;
-    player.hp = Math.min(player.maxHp, player.hp + player.maxHp * (inCombat ? 0.002 : 0.02) * dt);
-    player.mp = Math.min(player.maxMp, player.mp + player.maxMp * (inCombat ? 0.015 : 0.045) * dt);
+    const hpRate = inCombat ? 0.002 + regenBonus(player.talents) : 0.02;   // Lifeblood
+    const mpMul = manaRegenMult(player.talents);                           // Attunement
+    player.hp = Math.min(player.maxHp, player.hp + player.maxHp * hpRate * dt);
+    player.mp = Math.min(player.maxMp, player.mp + player.maxMp * (inCombat ? 0.015 : 0.045) * mpMul * dt);
+    // Living Stone: Stoneform doubles as a recovery window
+    if (player.stoneformT > 0 && choiceIs(player.talents, 'bulwark', 21, 'livingstone')) {
+      player.hp = Math.min(player.maxHp,
+        player.hp + player.maxHp * LIVING_STONE_PCT * healRecvMult(player.talents) * dt);
+    }
   }
   player.gcd = Math.max(0, player.gcd - dt);
   player.attackCd = Math.max(0, player.attackCd - dt);
   player.potionCd = Math.max(0, player.potionCd - dt);
   player.stoneformT = Math.max(0, player.stoneformT - dt);
+  player.spreeT = Math.max(0, player.spreeT - dt);
+  player.avengerT = Math.max(0, player.avengerT - dt);
+  player.slipstreamT = Math.max(0, player.slipstreamT - dt);
+  player.skystepT = Math.max(0, player.skystepT - dt);
+  player.undyingCd = Math.max(0, player.undyingCd - dt);
   for (const k in player.cooldowns) player.cooldowns[k] = Math.max(0, player.cooldowns[k] - dt);
 
   // --- movement ---
@@ -424,21 +542,24 @@ export function updatePlayer(game, dt, elapsed) {
         game.ui.hideCastBar();
         game.ui.log('Spell interrupted.', 'log-sys');
       }
-      const nx = g.position.x + moveDir.x * player.speed * dt;
-      const nz = g.position.z + moveDir.z * player.speed * dt;
-      if (game.zone === 'crypt') {
-        g.position.x = THREE.MathUtils.clamp(nx, 252, 358);
-        g.position.z = THREE.MathUtils.clamp(nz, -58, 58);
-      } else {
-        // one continuous overworld+highlands box: west edge -150, east edge EAST_EDGE
-        g.position.x = THREE.MathUtils.clamp(nx, -150, HIGHLANDS.EAST_EDGE);
-        g.position.z = THREE.MathUtils.clamp(nz, -150, 150);
+      // transient speed buffs are per-frame state, not recalcStats material
+      let spd = player.speed;
+      if (player.combatTimer <= 0) {
+        if (choiceIs(player.talents, 'pathfinder', 11, 'trailwind')) spd *= TRAILWIND_MULT;
+        if (player.mount) spd *= 1.6;   // the golden boar carries you (combat dismounts)
       }
+      if (player.slipstreamT > 0) spd *= SLIPSTREAM_MULT;
+      if (player.skystepT > 0) spd *= SKYSTEP_MULT;
+      const nx = g.position.x + moveDir.x * spd * dt;
+      const nz = g.position.z + moveDir.z * spd * dt;
+      const zb = ZONE_BOUNDS[game.zone] || ZONE_BOUNDS.world;
+      g.position.x = THREE.MathUtils.clamp(nx, zb.x1, zb.x2);
+      g.position.z = THREE.MathUtils.clamp(nz, zb.z1, zb.z2);
       g.rotation.y = Math.atan2(moveDir.x, moveDir.z);
     }
 
     // --- biome zone follows the player across the pass (hysteresis avoids flicker) ---
-    if (game.zone !== 'crypt') {
+    if (game.zone === 'world' || game.zone === 'highlands') {
       if (game.zone !== 'highlands' && g.position.x > HIGHLANDS.ZONE_ENTER) {
         game.setZone('highlands');
       } else if (game.zone === 'highlands' && g.position.x < HIGHLANDS.ZONE_EXIT) {
@@ -446,10 +567,12 @@ export function updatePlayer(game, dt, elapsed) {
       }
     }
 
-    // crypt walls are solid (for you, at least)
-    if (game.zone === 'crypt' && game.dungeon) {
+    // dungeon walls are solid (for you, at least)
+    const walled = game.zone === 'crypt' ? game.dungeon
+      : game.zone === 'sanctum' ? game.sanctum : null;
+    if (walled) {
       const r = 0.55;
-      for (const w of game.dungeon.walls) {
+      for (const w of walled.walls) {
         const px = g.position.x, pz = g.position.z;
         if (px > w.x1 - r && px < w.x2 + r && pz > w.z1 - r && pz < w.z2 + r) {
           const pushW = px - (w.x1 - r), pushE = (w.x2 + r) - px;
@@ -479,6 +602,30 @@ export function updatePlayer(game, dt, elapsed) {
   }
 
   animateHumanoid(g, player.anim, elapsed);
+
+  // --- golden boar mount: carried whenever out of combat, alive, purchased ---
+  // one condition drives speed, visibility, and seat height — no state machine
+  const mountActive = player.mount && player.alive && player.combatTimer <= 0;
+  if (mountActive && !player.mountMesh) {
+    player.mountMesh = buildBoar(true, 'gold');
+    player.mountMesh.scale.setScalar(1.3);
+    player.mountMesh.rotation.y = -Math.PI / 2;  // beast rigs face +X; the rider faces +Z
+    player.group.add(player.mountMesh);
+  }
+  if (player.mountMesh) {
+    player.mountMesh.visible = mountActive;
+    if (mountActive) animateBeast(player.mountMesh, player.anim, elapsed);
+  }
+  player.body.position.y = mountActive ? 0.9 : 0;
+
+  // --- starlight trail (Phial of Starlight; cosmetic) ---
+  if (player.glow && !player.glowOff && player.alive) {
+    player._glowT -= dt;
+    if (player.anim.moving && player._glowT <= 0) {
+      player._glowT = 0.12;
+      game.fx.burst(g.position, player.cls.skills[0].color, 2);
+    }
+  }
 
   // --- attack animation timer ---
   if (player.anim.attackT >= 0) {

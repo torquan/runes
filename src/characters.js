@@ -26,13 +26,21 @@ export const CLASS_STYLES = {
   kaska:   { tunic: 0x6e2a12, trim: 0xff7a30, weapon: 'staff' },  // Emberwarden gate NPC (warm/ember)
   golem:   { tunic: 0x161018, trim: 0x4a3a18, weapon: 'none' },   // Obsidian Golem (humanoid rig, scaled)
   wraith:  { tunic: 0x3a1818, trim: 0xff5020, weapon: 'staff' },  // Cinder Wraith (ranged caster)
+  // ---- the Frostveil & the Starfall Sanctum ----
+  rimebound:  { tunic: 0x2b4a6e, trim: 0x7fd4ff, weapon: 'none',  skin: 0xdfe9f5 },  // Rimebound Sentinel (frost-rimed)
+  frostjarl:  { tunic: 0x3c4a63, trim: 0x9fe8ff, weapon: 'sword', skin: 0xbfdcf0 },  // Hrimnir the Avalanche-Jarl
+  custodian:  { tunic: 0x232a4a, trim: 0xffd87a, weapon: 'staff', skin: 0xcfe8ff },  // Astral Custodian
+  vaultwarden:{ tunic: 0x2c3460, trim: 0xffd87a, weapon: 'staff', skin: 0xffd87a },  // Seraphel the Vault Warden
+  hollowstar: { tunic: 0x0d0a1c, trim: 0xffd87a, weapon: 'none',  skin: 0x14182e },  // Noctyra the Hollow Star
+  odda:       { tunic: 0x5a6a4a, trim: 0xc9a14a, weapon: 'none' },   // Surveyor Odda: field greens, brass
+  fenwick:    { tunic: 0x4a3e6e, trim: 0xe8d9a0, weapon: 'staff' },  // Archivist Fenwick: violet, parchment
 };
 
 export function buildHumanoid(style) {
   const s = CLASS_STYLES[style] || CLASS_STYLES.npc;
   const g = new THREE.Group();
 
-  const skin = lambert(0xdba87a);
+  const skin = lambert(s.skin ?? 0xdba87a);
   const tunic = lambert(s.tunic);
   const trim = lambert(s.trim);
   const dark = lambert(0x3a2c1a);
@@ -107,10 +115,11 @@ export function buildHumanoid(style) {
   return g;
 }
 
-export function buildBoar(elite = false) {
+export function buildBoar(elite = false, palette) {
   const g = new THREE.Group();
-  const hide = lambert(elite ? 0x4a2c20 : 0x6e4a32);
-  const dark = lambert(0x3a2418);
+  const gold = palette === 'gold';
+  const hide = lambert(gold ? 0xc9a14a : elite ? 0x4a2c20 : 0x6e4a32);
+  const dark = lambert(gold ? 0x8a6a2a : 0x3a2418);
 
   const body = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.62, 0.58), hide));
   body.position.y = 0.55;
@@ -124,7 +133,7 @@ export function buildBoar(elite = false) {
   head.position.x = 0.2;
   const snout = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.22), dark);
   snout.position.set(0.5, -0.06, 0);
-  const tuskMat = lambert(0xe8dcc0);
+  const tuskMat = lambert(gold ? 0xfff0c0 : 0xe8dcc0);
   const tuskL = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.2, 4), tuskMat);
   tuskL.position.set(0.42, -0.1, 0.14);
   tuskL.rotation.z = 0.6;
@@ -150,10 +159,11 @@ export function buildBoar(elite = false) {
   return g;
 }
 
-export function buildWolf() {
+export function buildWolf(palette) {
   const g = new THREE.Group();
-  const fur = lambert(0x5e6470);
-  const dark = lambert(0x3a3e48);
+  const frost = palette === 'frost';
+  const fur = lambert(frost ? 0xdfe9f5 : 0x5e6470);
+  const dark = lambert(frost ? 0x9fb6c8 : 0x3a3e48);
 
   const body = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 0.42), fur));
   body.position.y = 0.62;
@@ -171,6 +181,15 @@ export function buildWolf() {
   const earR = earL.clone();
   earR.position.z = -0.1;
   headPivot.add(head, muzzle, earL, earR);
+  if (frost) {
+    const eyeGeo = new THREE.BoxGeometry(0.06, 0.06, 0.05);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeL.position.set(0.3, 0.04, 0.12);
+    const eyeR = eyeL.clone();
+    eyeR.position.z = -0.12;
+    headPivot.add(eyeL, eyeR);
+  }
   g.add(headPivot);
 
   const tail = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.12, 0.12), dark);
@@ -191,6 +210,74 @@ export function buildWolf() {
 
   g.userData.rig = { legs, headPivot };
   g.userData.height = 1.1;
+  return g;
+}
+
+// Hoarfrost Serpent — a hooded cobra. Faces +X like the other beasts; body
+// segments trail away along -X so animateSerpent can undulate them laterally.
+export function buildSerpent() {
+  const g = new THREE.Group();
+  const scales = lambert(0x7fd4ff);
+  const belly = lambert(0xdfe9f5);
+  const hoodInner = lambert(0x2b4a6e);
+
+  // body: 4 tapering box segments behind the head along -X, each in its own
+  // pivot Group so rotation/offset animation works like the other rigs.
+  const segDims = [
+    [0.9, 0.5, 0.55],
+    [0.78, 0.43, 0.49],
+    [0.64, 0.37, 0.42],
+    [0.5, 0.3, 0.35],
+  ];
+  const segments = [];
+  let sx = -0.45, sy = 0.5;
+  segDims.forEach(([w, h, d], i) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(sx, sy, 0);
+    const m = shadowed(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), i % 2 ? belly : scales));
+    pivot.add(m);
+    g.add(pivot);
+    segments.push(pivot);
+    sx -= 0.8;          // each segment -0.8x from the last
+    sy -= 0.08;         // slight y-droop down the body
+  });
+  // lying tail cone past the last segment
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.9, 5), scales);
+  tail.position.set(sx, sy + 0.04, 0);
+  tail.rotation.z = -Math.PI / 2;   // lying on its side, pointing -X
+  g.add(tail);
+
+  // head: wedge box at +X with fangs and eyes
+  const headPivot = new THREE.Group();
+  headPivot.position.set(0.55, 0.62, 0);
+  const head = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.6), scales));
+  head.position.x = 0.2;
+  const fangGeo = new THREE.ConeGeometry(0.05, 0.2, 4);
+  const fangMat = lambert(0xffffff);
+  const fangL = new THREE.Mesh(fangGeo, fangMat);
+  fangL.position.set(0.42, -0.22, 0.12);
+  fangL.rotation.x = Math.PI;       // point down under the snout
+  const fangR = fangL.clone();
+  fangR.position.z = -0.12;
+  const eyeGeo = new THREE.SphereGeometry(0.07, 8, 6);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+  const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.position.set(0.3, 0.1, 0.18);
+  const eyeR = eyeL.clone();
+  eyeR.position.z = -0.18;
+  headPivot.add(head, fangL, fangR, eyeL, eyeR);
+
+  // hood: flattened fan box behind the head, tilted up ~35 degrees
+  const hood = new THREE.Group();
+  hood.position.set(-0.15, 0.05, 0);
+  hood.rotation.z = 35 * Math.PI / 180;
+  const hoodFan = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.7), hoodInner));
+  hood.add(hoodFan);
+  headPivot.add(hood);
+  g.add(headPivot);
+
+  g.userData.rig = { segments, headPivot, hood };
+  g.userData.height = 1.0;
   return g;
 }
 
@@ -322,6 +409,32 @@ export function animateBeast(group, state, elapsed) {
   if (state.attackT >= 0) {
     const t = state.attackT;
     r.headPivot.rotation.x = t < 0.4 ? (t / 0.4) * 0.5 : 0.5 - ((t - 0.4) / 0.6) * 1.1;
+  }
+}
+
+export function animateSerpent(group, state, elapsed) {
+  const r = group.userData.rig;
+  if (!r || state.dead) return;  // shared fall-over in entities.js handles the corpse
+
+  // idle/move: lateral sine undulation rippling down the body, each segment
+  // phase-offset; amplitude and speed scale up while moving.
+  const spd = state.speed || 1;
+  const ph = elapsed * (state.moving ? 6 * spd : 2.2);
+  const amp = state.moving ? 0.32 * spd : 0.14;
+  r.segments.forEach((seg, i) => {
+    seg.position.z = Math.sin(ph - i * 0.8) * amp;
+    seg.rotation.y = Math.cos(ph - i * 0.8) * amp * 0.5;
+  });
+
+  // attack: head + hood lunge forward (+0.4 on x), hood flares wider then back.
+  if (state.attackT >= 0) {
+    const t = state.attackT;
+    const lunge = Math.sin(Math.min(t, 1) * Math.PI);   // 0 -> 1 -> 0
+    r.headPivot.position.x = 0.55 + lunge * 0.4;
+    r.hood.scale.z = 1 + lunge * 0.3;                   // 1.0 -> 1.3 -> 1.0
+  } else {
+    r.headPivot.position.x = 0.55;
+    r.hood.scale.z = 1;
   }
 }
 

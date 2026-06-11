@@ -2,9 +2,10 @@
 
 Current state: chapter 1 (boars→Rurik, ~lv 12), Trials (25/30/37), the Sunken
 Crypt (41–55), dual-classing, shop, bounty, jumping, save/continue, the level
-rebalance, gear & inventory, talents, and the Ashen Highlands (55–75 post-cap
-arc, cap = Pyraxis 75) — all shipped. Sections 1–3 below are done; the backlog
-(section 4) is what remains.
+rebalance, gear & inventory, talents, the Ashen Highlands (55–75), and the
+**Frostveil & Starfall Sanctum expansion** (82–105, cap = Noctyra 105, talents
+v2 "Deep Paths", relic slot, mount, secrets) — all shipped. Sections 1–3 and 5
+below are done; the backlog (section 4) is what remains.
 
 Balance rule for everything below (see CLAUDE.md "sustain-math lesson"):
 **boss sustained dps sets the real level floor: `required maxHp ≈ dps / 0.10`.**
@@ -83,13 +84,43 @@ Built **after** gear so its loot table is the draw, not just XP.
 
 ## 4. Backlog (unordered, grab-bag)
 
-- Dungeon minimap: draw the crypt wall layout instead of darkness.
+- Dungeon minimap: draw the crypt/sanctum wall layouts instead of darkness.
 - Settings panel: volume slider, camera sensitivity, FCT density.
 - More skills per class at 25/40/55 (interrupt, stun, class-specific).
-- Mounts (speed + flavor) as a late gold sink.
+- ~~Mounts~~ ✅ shipped (Saddle of the Howling Plains, §5).
 - A proper character sheet (C key): all stats, gear, talents in one place.
 - Boss enrage timers (soft: +dps after N minutes) to cap fight length.
 - Gamepad support; key rebinding.
+- A fourth talent branch / paragon layer for the points banked past 90
+  (levels 100+ hold surplus by design — reserved headroom).
+
+## 5. The Frostveil & the Starfall Sanctum (82–105)  ✅ SHIPPED
+
+The post-Pyraxis arc, built for a level-96 hero with nothing left to fight.
+
+- [x] **Talents v2 — "The Deep Paths"**: 30-rank branches (90 total vs 87
+      points at 96 — near-max, never max), binary choice nodes at ranks 11/21
+      (six permanent forks), the **Mastery Oath** at 25+ ranks (Reaver /
+      Mountain / Horizon — ONE, ever; upgrades the branch capstone in place).
+      Save v4 with a one-time full refund of old talents.
+- [x] **The Frostveil** (82–92): western pocket (x −360..−250), polar-night
+      aurora biome, new serpent rig, 3 mob families + Hrimnir (92). Gated:
+      Pyraxis dead OR level 78. Surveyor Odda's chain + bounty.
+- [x] **The Starfall Sanctum** (96–105): northern pocket (z 250..360, floor
+      y 40), crypt-style walls, Astral Custodians, Seraphel (100), and
+      **Noctyra, the Hollow Star (105)** with the NEW `sanctuary` mechanic
+      (avoid `'in'` — the telegraph circle is the only safe ground, GET IN!).
+      Gated: Hrimnir dead OR level 92. Archivist Fenwick's chain + bounty.
+- [x] **Relic slot** (4th gear slot, expansion-only drops; The Last Seal BiS),
+      7 new uniques, expansion drop tables.
+- [x] **Gold sinks**: golden boar mount (150k, +60% ooc speed), Phial of
+      Starlight (40k, cosmetic), the Oathbreaker's Toll on respec.
+- [x] **Secrets**: Thunderbristle (L97 rare-spawn in the starter meadow,
+      900s), the Hollow Wall vault behind Vargoth's throne, Hermit Madge's
+      riddles, the Stillest Pond (fishing; 0.5% Carp of a Thousand Regrets),
+      the Festival of the Boar (Konami code), Bodo's cairn.
+- [x] **Console helpers**: `__veteran2('<class>')` (level-90 post-Pyraxis v4
+      seed), `__give(slot, rarity, ilvl?)`.
 
 ---
 

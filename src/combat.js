@@ -1,8 +1,11 @@
 import * as THREE from 'three';
-import { heightAt, HIGHLANDS } from './noise.js';
+import { heightAt, ZONE_BOUNDS } from './noise.js';
 import { aggroEnemy, killEnemy } from './entities.js';
 import { rollDrops, rarityColor } from './items.js';
-import { gcdValue, healRecvMult } from './talents.js';
+import { gcdValue, healRecvMult, choiceIs, critDmgBonus, autoInterval,
+         stoneformReduction, BLOODSCENT_MULT, SPREE_MULT, AVENGER_MULT,
+         CLEAVE_PCT, CLEAVE_RADIUS, HARVEST_PCT,
+         PROSPECTOR_GOLD, PROSPECTOR_RUNE } from './talents.js';
 
 // ---------- particle bursts ----------
 export function createFx(scene) {
@@ -107,11 +110,21 @@ function setTarget(game, enemy) {
 // ---------- damage ----------
 function applyDamage(game, enemy, dmg, crit, skillName) {
   if (!enemy.alive) return;
+  // Bloodscent: every damage source funnels through here — one hook covers all
+  if (choiceIs(game.player.talents, 'onslaught', 11, 'bloodscent') &&
+      enemy.hp / enemy.maxHp < 0.35) {
+    dmg = Math.round(dmg * BLOODSCENT_MULT);
+  }
   // flat armor: a throughput tax (e.g. golems), never a wall (min 1). Applied
   // after the crit roll so the shown number matches HP lost; projectiles & AoE
   // inherit it for free since they all funnel through here.
   const armor = enemy.type.armor || 0;
   if (armor) dmg = Math.max(1, dmg - armor);
+  // Oath of the Reaver: crits shave 0.5s off every skill cooldown
+  if (crit && game.player.talents.mastery === 'onslaught') {
+    const cds = game.player.cooldowns;
+    for (const k in cds) cds[k] = Math.max(0, cds[k] - 0.5);
+  }
   enemy.hp -= dmg;
   game.player.combatTimer = 5;
   aggroEnemy(enemy);
@@ -145,11 +158,17 @@ function onKill(game, enemy) {
       game.slain.add(enemy.kind);
     }
   }
+  // Killing Spree: the tempo loop — every kill rearms the buff
+  if (choiceIs(game.player.talents, 'onslaught', 21, 'spree')) game.player.spreeT = 6;
+
   game.player.gainXp(game, xp);
   const [gMin, gMax] = enemy.type.gold;
-  game.player.gainGold(game, Math.round(gMin + Math.random() * (gMax - gMin)));
+  const prospector = choiceIs(game.player.talents, 'pathfinder', 11, 'prospector');
+  let goldRoll = Math.round(gMin + Math.random() * (gMax - gMin));
+  if (prospector) goldRoll = Math.round(goldRoll * PROSPECTOR_GOLD);
+  game.player.gainGold(game, goldRoll);
 
-  const runeChance = enemy.elite ? 1 : 0.22;
+  const runeChance = enemy.elite ? 1 : (prospector ? PROSPECTOR_RUNE : 0.22);
   if (Math.random() < runeChance) {
     const n = enemy.elite ? 3 : 1;
     game.player.runes += n;
@@ -169,21 +188,54 @@ function onKill(game, enemy) {
   }
   if (drops.length) game.save?.();
 
-  // both chains see every kill; each ignores kinds it doesn't track and each
+  // every chain sees every kill; each ignores kinds it doesn't track and each
   // bounty only counts its own zone's creatures (gated in quests.js).
   game.quests.onKill(game, enemy);
   game.highlandQuests.onKill(game, enemy);
+  game.frostveilQuests?.onKill(game, enemy);
+  game.sanctumQuests?.onKill(game, enemy);
 }
 
 function rollDamage(player, mult) {
-  const base = player.baseDamage() * mult;
+  let m = mult;
+  if (player.spreeT > 0) m *= SPREE_MULT;       // Killing Spree window
+  if (player.avengerT > 0) m *= AVENGER_MULT;   // Avenger's Pact window
+  const base = player.baseDamage() * m;
   const variance = 0.9 + Math.random() * 0.2;
   const crit = Math.random() < player.critChance();
-  return { dmg: Math.max(1, Math.round(base * variance * (crit ? 1.8 : 1))), crit };
+  const critMult = 1.8 + critDmgBonus(player.talents);   // Deep Wounds
+  return { dmg: Math.max(1, Math.round(base * variance * (crit ? critMult : 1))), crit };
+}
+
+// thorns (Bramble Ward / Worldstone Bulwark). Deferred one combat tick: the
+// trigger is player.takeDamage, which fires INSIDE updateEnemies' loop — a
+// reflect kill there could splice game.enemies mid-iteration (clearMinions).
+const reflectQueue = [];
+export function reflectDamage(game, enemy, dmg) {
+  reflectQueue.push({ enemy, dmg });
+}
+
+// the auto-attack riders: Rending Cleave splash + Crimson Harvest lifesteal.
+// Called from BOTH landing sites (melee pendingMelee + ranged projectile).
+function autoAttackRiders(game, target, dmg) {
+  const p = game.player;
+  if (choiceIs(p.talents, 'onslaught', 11, 'cleave')) {
+    let splashed = 0;
+    for (const e of game.enemies) {
+      if (e === target || !e.alive) continue;
+      if (e.group.position.distanceTo(target.group.position) <= CLEAVE_RADIUS + reachOf(e)) {
+        applyDamage(game, e, Math.max(1, Math.round(dmg * CLEAVE_PCT)), false, 'Rending Cleave');
+        if (++splashed >= 2) break;
+      }
+    }
+  }
+  if (choiceIs(p.talents, 'onslaught', 21, 'harvest')) {
+    selfHeal(game, Math.round(dmg * HARVEST_PCT));
+  }
 }
 
 // ---------- projectiles ----------
-function fireProjectile(game, enemy, color, dmg, crit, skillName, selfHealPct = 0) {
+function fireProjectile(game, enemy, color, dmg, crit, skillName, selfHealPct = 0, opts = {}) {
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.16, 6, 6),
     new THREE.MeshBasicMaterial({ color })
@@ -192,7 +244,15 @@ function fireProjectile(game, enemy, color, dmg, crit, skillName, selfHealPct = 
   mesh.position.y += 1.4;
   game.scene.add(mesh);
   game.audio.bolt();
-  projectiles.push({ mesh, enemy, dmg, crit, skillName, selfHealPct, speed: 26 });
+  projectiles.push({ mesh, enemy, dmg, crit, skillName, selfHealPct, speed: 26, ...opts });
+}
+
+// Reaper's Verdict: an execute kill resets the cooldown and refunds the mana
+function verdictReset(game, skill) {
+  const p = game.player;
+  p.cooldowns[skill.id] = 0;
+  p.mp = Math.min(p.maxMp, p.mp + skill.mana);
+  game.ui.log('The Verdict is final — the blade returns to your hand.', 'log-heal');
 }
 
 const v1 = new THREE.Vector3();
@@ -265,7 +325,7 @@ function resolveSkill(game, skill) {
     const t = p.target;
     if (!t || !t.alive) return;
     if (t.hp / t.maxHp > skill.hpThreshold) {
-      game.ui.log(`${t.name} is too healthy to execute (needs <30% HP).`, 'log-sys');
+      game.ui.log(`${t.name} is too healthy to execute (needs <${Math.round(skill.hpThreshold * 100)}% HP).`, 'log-sys');
       // refund: undo the cost/cd we just paid so it doesn't waste the button
       p.mp += skill.mana;
       p.cooldowns[skill.id] = 0;
@@ -273,15 +333,21 @@ function resolveSkill(game, skill) {
       return;
     }
     const { dmg, crit } = rollDamage(p, skill.mult);
-    if (p.cls.ranged || skill.range > 5) fireProjectile(game, t, skill.color, dmg, crit, skill.name);
-    else applyDamage(game, t, dmg, crit, skill.name);
+    const verdict = p.talents.mastery === 'onslaught';   // Reaper's Verdict resets on kill
+    if (p.cls.ranged || skill.range > 5) {
+      fireProjectile(game, t, skill.color, dmg, crit, skill.name, 0, { verdictSkill: verdict ? skill : null });
+    } else {
+      applyDamage(game, t, dmg, crit, skill.name);
+      if (verdict && !t.alive) verdictReset(game, skill);
+    }
     return;
   }
 
   if (skill.kind === 'stoneform') {
     p.stoneformT = skill.duration;
-    game.ui.floatText(p.group.position, 'Stoneform!', 'heal');
-    game.ui.log('You harden into living stone — 50% damage reduction for 6s.', 'log-heal');
+    const pct = Math.round((1 - stoneformReduction(p.talents)) * 100);
+    game.ui.floatText(p.group.position, `${skill.name}!`, 'heal');
+    game.ui.log(`You harden into living stone — ${pct}% damage reduction for ${skill.duration}s.`, 'log-heal');
     game.audio.rune();
     game.fx.burst(p.group.position, 0x9ad0ff, 26);
     return;
@@ -293,12 +359,15 @@ function resolveSkill(game, skill) {
     let nx = g.position.x + Math.sin(yaw) * skill.distance;
     let nz = g.position.z + Math.cos(yaw) * skill.distance;
     // respect zone bounds (mirror updatePlayer's clamps)
-    if (game.zone === 'crypt') { nx = THREE.MathUtils.clamp(nx, 252, 358); nz = THREE.MathUtils.clamp(nz, -58, 58); }
-    else { nx = THREE.MathUtils.clamp(nx, -150, HIGHLANDS.EAST_EDGE); nz = THREE.MathUtils.clamp(nz, -150, 150); }
+    const zb = ZONE_BOUNDS[game.zone] || ZONE_BOUNDS.world;
+    nx = THREE.MathUtils.clamp(nx, zb.x1, zb.x2);
+    nz = THREE.MathUtils.clamp(nz, zb.z1, zb.z2);
     g.position.x = nx; g.position.z = nz;
     g.position.y = Math.max(g.position.y, heightAt(nx, nz));   // land on ground at destination
     p.onGround = true; p.vy = 0;
-    game.ui.floatText(g.position, 'Dash!', 'heal');
+    if (choiceIs(p.talents, 'pathfinder', 21, 'slipstream')) p.slipstreamT = 3;
+    if (p.talents.mastery === 'pathfinder') p.skystepT = 1.5;  // Skystep landing burst
+    game.ui.floatText(g.position, `${skill.name}!`, 'heal');
     game.audio.bolt();
     game.fx.burst(g.position, 0x8aff9d, 22);
     return;
@@ -347,6 +416,12 @@ function selfHeal(game, amount) {
 export function updateCombat(game, dt) {
   const p = game.player;
 
+  // queued thorns from this frame's enemy hits (deferred out of updateEnemies)
+  while (reflectQueue.length) {
+    const r = reflectQueue.shift();
+    if (r.enemy.alive && p.alive) applyDamage(game, r.enemy, r.dmg, false, 'Thorns');
+  }
+
   // casting progress
   if (p.casting) {
     p.casting.t += dt;
@@ -364,13 +439,13 @@ export function updateCombat(game, dt) {
   if (p.alive && t && t.alive && !p.casting && p.attackCd <= 0) {
     const dist = p.group.position.distanceTo(t.group.position);
     if (dist <= p.cls.autoRange + reachOf(t)) {
-      p.attackCd = 1.7;
+      p.attackCd = autoInterval(p.talents);   // Frenzy shortens the swing
       p.anim.attackT = 0;
       v1.subVectors(t.group.position, p.group.position);
       p.group.rotation.y = Math.atan2(v1.x, v1.z);
       const { dmg, crit } = rollDamage(p, 1.0);
       if (p.cls.ranged) {
-        fireProjectile(game, t, '#ffe9b0', dmg, crit, 'auto attack');
+        fireProjectile(game, t, '#ffe9b0', dmg, crit, 'auto attack', 0, { isAuto: true });
         game.audio.arrow();
       } else {
         pendingMelee = { t: 0.22, enemy: t, dmg, crit };
@@ -387,6 +462,7 @@ export function updateCombat(game, dt) {
       if (m.enemy.alive && p.alive &&
           p.group.position.distanceTo(m.enemy.group.position) < p.cls.autoRange + reachOf(m.enemy) + 1.5) {
         applyDamage(game, m.enemy, m.dmg, m.crit, 'attack');
+        autoAttackRiders(game, m.enemy, m.dmg);   // Cleave splash + Crimson Harvest
       }
     }
   }
@@ -401,6 +477,8 @@ export function updateCombat(game, dt) {
       if (pr.enemy.alive) {
         applyDamage(game, pr.enemy, pr.dmg, pr.crit, pr.skillName);
         if (pr.selfHealPct) selfHeal(game, Math.round(pr.dmg * pr.selfHealPct));
+        if (pr.isAuto) autoAttackRiders(game, pr.enemy, pr.dmg);
+        if (pr.verdictSkill && !pr.enemy.alive) verdictReset(game, pr.verdictSkill);
       }
       game.scene.remove(pr.mesh);
       pr.mesh.geometry.dispose();

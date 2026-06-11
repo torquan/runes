@@ -35,6 +35,23 @@ export const WORLD_SIZE = 420;   // was 320 — extends the map east into the As
 // function returns its flat floor there so every system works inside unchanged.
 export const CRYPT = { x1: 250, x2: 360, z1: -60, z2: 60, floor: 30 };
 
+// The Frostveil: the crypt's western mirror — an OUTDOOR pocket (own noise
+// profile, own ground mesh in frostveil.js; the world terrain mesh ends at ±210).
+export const FROSTVEIL = { x1: -360, x2: -250, z1: -60, z2: 60 };
+
+// The Starfall Sanctum: the dungeon pocket north of everything, flat floor.
+export const SANCTUM = { x1: -60, x2: 60, z1: 250, z2: 360, floor: 40 };
+
+// Per-zone playable bounds (player clamp + Dash clamp read these — one truth).
+// 'highlands' shares the continuous overworld box.
+export const ZONE_BOUNDS = {
+  world:     { x1: -150, x2: 205, z1: -150, z2: 150 },   // x2 = HIGHLANDS.EAST_EDGE
+  highlands: { x1: -150, x2: 205, z1: -150, z2: 150 },
+  crypt:     { x1: 252, x2: 358, z1: -58, z2: 58 },
+  frostveil: { x1: -358, x2: -252, z1: -58, z2: 58 },
+  sanctum:   { x1: -58, x2: 58, z1: 252, z2: 358 },
+};
+
 // The Ashen Highlands: the eastern shelf of the same continuous map. NOT a
 // pocket — the height field blends from meadow into ash-cracked plateau across
 // a border band so players walk across the seam. Gate/pass sits at GATE_X.
@@ -54,6 +71,20 @@ export function inHighlands(x) { return x > HIGHLANDS.GATE_X; }
 // the pass it blends smoothly into the Ashen Highlands plateau (no cliff/seam).
 export function heightAt(x, z) {
   if (x > CRYPT.x1 && x < CRYPT.x2 && z > CRYPT.z1 && z < CRYPT.z2) return CRYPT.floor;
+  if (x > SANCTUM.x1 && x < SANCTUM.x2 && z > SANCTUM.z1 && z < SANCTUM.z2) return SANCTUM.floor;
+
+  // the Frostveil: a glacial crater-vale — rolling snowfield, one flat frozen
+  // tarn (the Sanctum's roof), steep moraine walls at every pocket edge
+  if (x > FROSTVEIL.x1 && x < FROSTVEIL.x2 && z > FROSTVEIL.z1 && z < FROSTVEIL.z2) {
+    let h = 8                                                  // vale shelf base
+      + fbm(x * 0.03 + 501.2, z * 0.03 + 77.7, 4) * 7          // rolling snowfield
+      + fbm(x * 0.09 + 11.1, z * 0.09 + 330.5, 3) * 1.8;       // wind-crusted drifts
+    const dT = Math.hypot(x + 305, z - 8);                     // frozen tarn bowl
+    if (dT < 24) h = 8.4 + (h - 8.4) * smooth(dT / 24);        // flat ice -> field
+    const dE = Math.min(x - FROSTVEIL.x1, FROSTVEIL.x2 - x, z - FROSTVEIL.z1, FROSTVEIL.z2 - z);
+    if (dE < 12) h += (12 - dE) * (12 - dE) * 0.35;            // moraine walls, up to +50
+    return h;
+  }
 
   const d = Math.hypot(x, z);
   let h = fbm(x * 0.018 + 31.7, z * 0.018 + 12.3, 4) * 11 - 4.5;

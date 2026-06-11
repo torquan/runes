@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { fbm, heightAt, WORLD_SIZE, HIGHLANDS } from './noise.js';
 import { SHOP, xpForLevel } from './player.js';
-import { RARITY, rarityColor, statSummary, totalEquippedStats } from './items.js';
-import { BRANCHES, ranks, CAPSTONE_THRESHOLD } from './talents.js';
+import { RARITY, rarityColor, statSummary, totalEquippedStats, ALL_SLOTS } from './items.js';
+import { BRANCHES, ranks, CAPSTONE_THRESHOLD, BRANCH_CAP, MASTERY_THRESHOLD,
+         MASTERIES, CHOICE_NODES, choiceNodeFor, choiceOf, capstoneFor,
+         spentTotal, TOTAL_RANKS } from './talents.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -137,10 +139,12 @@ export function createUi() {
       $('rune-count').textContent = p.runes;
       $('potion-count').textContent = p.potionCd > 0 ? Math.ceil(p.potionCd) : p.potions;
       $('potion-pouch').classList.toggle('on-cd', p.potionCd > 0);
-      $('zone-name').textContent =
-        game.zone === 'crypt' ? 'The Sunken Crypt'
-        : game.zone === 'highlands' ? 'The Ashen Highlands'
-        : 'Howling Plains';
+      $('zone-name').textContent = {
+        crypt: 'The Sunken Crypt',
+        highlands: 'The Ashen Highlands',
+        frostveil: 'The Frostveil',
+        sanctum: 'The Starfall Sanctum',
+      }[game.zone] || 'Howling Plains';
 
       // target frame
       const t = p.target;
@@ -210,7 +214,7 @@ export function createUi() {
         el.querySelector('.np-bang').textContent = '';
       }
 
-      // npc plates with quest markers (Barnaby + Emberwarden Kaska)
+      // npc plates with quest markers (each npc carries its chain, if any)
       for (const n of game.npcs) {
         const el = this.plateFor(n, 'friendly');
         const pt = worldToScreen(game, n.group.position, 2.4);
@@ -220,8 +224,7 @@ export function createUi() {
         el.style.top = `${pt.y}px`;
         el.querySelector('.np-name').textContent = n.name;
         el.querySelector('.np-hp').style.display = 'none';
-        const qObj = (n === game.npc) ? game.quests : game.highlandQuests;
-        el.querySelector('.np-bang').textContent = qObj.marker();
+        el.querySelector('.np-bang').textContent = n.chain ? n.chain.marker() : '';
       }
     },
 
@@ -260,7 +263,7 @@ export function createUi() {
     // highland update never blanks Barnaby's tracked quests, and vice versa.
     refreshQuestTracker() {
       const game = window.__game;
-      const chains = [game.quests, game.highlandQuests].filter(Boolean);
+      const chains = [game.quests, game.highlandQuests, game.frostveilQuests, game.sanctumQuests].filter(Boolean);
       const wrap = $('quest-entries');
       wrap.innerHTML = '';
       const visible = [];
@@ -322,7 +325,8 @@ export function createUi() {
     },
 
     // ---------- dialog ----------
-    showDialog({ text, objectives, rewards, buttons }) {
+    showDialog({ title, text, objectives, rewards, buttons }) {
+      $('dialog-npc-name').textContent = title || 'Pioneer Barnaby';
       $('dialog-text').textContent = text;
       $('dialog-objectives').innerHTML = (objectives || []).map((o) => `<div>${o}</div>`).join('');
       $('dialog-rewards').textContent = rewards || '';
@@ -417,7 +421,7 @@ export function createUi() {
       hint.classList.toggle('selling', selling);
 
       // equipped row
-      for (const slot of ['weapon', 'armor', 'trinket']) {
+      for (const slot of ALL_SLOTS) {
         const cell = document.querySelector(`.equip-slot[data-slot="${slot}"] .eq-cell`);
         const it = p.equipped[slot];
         cell.innerHTML = it ? this._itemCellHTML(it) : '';
@@ -453,7 +457,7 @@ export function createUi() {
     },
 
     _itemCellHTML(it) {
-      const icon = { weapon: '⚔', armor: '⛨', trinket: '✦' }[it.slot];
+      const icon = { weapon: '⚔', armor: '⛨', trinket: '✦', relic: '◆' }[it.slot];
       return `<span class="inv-icon" style="color:${rarityColor(it.rarity)}">${icon}</span>`;
     },
 
@@ -532,11 +536,20 @@ export function createUi() {
       html += row('Healing Power', `+${pct(p.gearStat('healPower'))}`);
 
       html += `<div class="char-section">Talents</div>`;
-      for (const branch of BRANCHES) html += row(branch.name, `${ranks(p.talents, branch.id)} / 15`);
+      for (const branch of BRANCHES) html += row(branch.name, `${ranks(p.talents, branch.id)} / ${BRANCH_CAP}`);
+      const chosen = [];
+      for (const cn of CHOICE_NODES) {
+        const v = choiceOf(p.talents, cn.branch, cn.atRank);
+        if (v) chosen.push(cn.options.find((o) => o.id === v).name);
+      }
+      if (chosen.length) html += row('Passives', chosen.join(' · '));
+      html += row('Oath', p.talents.mastery
+        ? MASTERIES[p.talents.mastery].name
+        : '<span class="char-empty">unsworn</span>');
       html += row('Unspent points', p.talentPoints());
 
       html += `<div class="char-section">Equipment</div>`;
-      for (const slot of ['weapon', 'armor', 'trinket']) {
+      for (const slot of ALL_SLOTS) {
         const it = p.equipped[slot];
         html += row(slot[0].toUpperCase() + slot.slice(1),
           it ? `<span style="color:${rarityColor(it.rarity)}">${it.name}</span>` : '<span class="char-empty">— empty —</span>');
@@ -544,7 +557,15 @@ export function createUi() {
       const t = totalEquippedStats(p.equipped);
       html += `<div class="char-gear-sum">${statSummary(t) || 'No gear equipped'}</div>`;
 
+      // Phial of Starlight toggle (cosmetic; purchase state in p.glow)
+      if (p.glow) {
+        html += `<div class="char-section">Vanity</div>`;
+        html += row('Starlight trail', `<button class="btn-ornate btn-mini" id="glow-toggle">${p.glowOff ? 'Off' : 'On'}</button>`);
+      }
+
       $('char-rows').innerHTML = html;
+      const gt = $('glow-toggle');
+      if (gt) gt.addEventListener('click', () => { p.glowOff = !p.glowOff; this.renderCharSheet(game); });
     },
 
     // ---------- talents ----------
@@ -559,7 +580,8 @@ export function createUi() {
       const badge = $('talent-badge');
       badge.classList.toggle('hidden', p.level < 10);   // hidden until L10
       $('talent-count').textContent = n;
-      badge.classList.toggle('has-points', n > 0);
+      // glow only while a LEGAL spend exists (surplus past 90 ranks banks quietly)
+      badge.classList.toggle('has-points', n > 0 && spentTotal(p.talents) < TOTAL_RANKS);
       if (this.talentOpen()) this.renderTalents(game);  // keep open panel live
       if (this.charOpen()) this.renderCharSheet(game);  // sheet too (level/talent changes)
     },
@@ -568,6 +590,7 @@ export function createUi() {
       badge.classList.remove('nudge'); void badge.offsetHeight; badge.classList.add('nudge');
     },
 
+    // all strings here are developer-authored (talents.js data) — HTML-safe
     renderTalents(game) {
       const p = game.player;
       const t = p.talents;
@@ -579,23 +602,111 @@ export function createUi() {
         const col = document.createElement('div');
         col.className = 'talent-col';
         let html = `<h3 style="color:${branch.color}">${branch.name}</h3>
-          <div class="talent-flavor">${branch.flavor}</div>`;
-        for (const tier of branch.tiers) {
-          html += `<div class="talent-tier"><span class="t-label">${tier.label}</span> — ${tier.value(t)}</div>`;
+          <div class="talent-flavor">${branch.flavor}</div>
+          <div class="talent-rankbar"><i style="width:${(n / BRANCH_CAP) * 100}%; background:${branch.color}"></i><span>${n} / ${BRANCH_CAP}</span></div>`;
+
+        // interleave stat tiers and choice nodes in rank order
+        const rows = branch.tiers.map((tier) => ({ at: tier.from, tier }));
+        for (const at of [11, 21]) {
+          const cn = choiceNodeFor(branch.id, at);
+          if (cn) rows.push({ at, choice: cn });
+        }
+        rows.sort((a, b) => a.at - b.at);
+
+        for (const row of rows) {
+          if (row.tier) {
+            const tier = row.tier;
+            const reached = n >= tier.from;
+            const span = tier.to > tier.from ? `ranks ${tier.from}–${tier.to}` : `rank ${tier.from}`;
+            html += `<div class="talent-tier${reached ? '' : ' dim'}"><span class="t-label">${tier.label}</span> — ${reached ? tier.value(t) : `${tier.per} (${span})`}</div>`;
+          } else {
+            const cn = row.choice;
+            const picked = choiceOf(t, branch.id, cn.atRank);
+            if (picked) {
+              for (const o of cn.options) {
+                html += o.id === picked
+                  ? `<div class="talent-choice picked">${o.icon} <b>${o.name}</b> ✓<small>${o.desc}</small></div>`
+                  : `<div class="talent-choice forsaken">${o.icon} ${o.name}<small>— the path not taken —</small></div>`;
+              }
+            } else if (n !== cn.atRank - 1) {
+              html += `<div class="talent-choice locked">◇ <b>${cn.label}</b> — a choice at rank ${cn.atRank}<small>${cn.options.map((o) => o.name).join('  or  ')}</small></div>`;
+            }
+            // n === atRank−1 unpicked: the picker buttons render below instead
+          }
         }
         if (branch.gcdNote) html += `<div class="talent-gcd">${branch.gcdNote(t)}</div>`;
+
+        // capstone box — oath-aware (upgrades in place when sworn)
+        const cap = capstoneFor(t, branch.id);
         const capUnlocked = n >= CAPSTONE_THRESHOLD;
+        const sworn = t.mastery === branch.id;
         html += `<div class="talent-cap ${capUnlocked ? 'unlocked' : 'locked'}">
-          ${branch.capstone.icon} ${branch.capstone.name}${capUnlocked ? '' : ` (unlocks at ${CAPSTONE_THRESHOLD})`}<br>
-          <small>${branch.capstone.desc}</small></div>`;
+          ${sworn ? MASTERIES[branch.id].icon + ' ' : ''}${cap.icon} ${cap.name}${capUnlocked ? '' : ` (unlocks at ${CAPSTONE_THRESHOLD})`}<br>
+          <small>${cap.desc}</small></div>`;
         col.innerHTML = html;
-        const btn = document.createElement('button');
-        btn.className = 'btn-ornate talent-spend';
-        const full = n >= 15;
-        btn.textContent = full ? 'Path Maxed' : `Spend (${n}/15)`;
-        btn.disabled = full || p.talentPoints() <= 0;
-        btn.addEventListener('click', () => { p.spendTalent(game, branch.id); this.renderTalents(game); });
-        col.appendChild(btn);
+
+        // spend button — replaced by the two pick buttons at a choice node
+        const pendingChoice = (n === 10 || n === 20) && !choiceOf(t, branch.id, n + 1)
+          ? choiceNodeFor(branch.id, n + 1) : null;
+        if (pendingChoice && p.talentPoints() > 0) {
+          const head = document.createElement('div');
+          head.className = 'talent-choice-head';
+          head.textContent = `${pendingChoice.label} — choose one:`;
+          col.appendChild(head);
+          for (const o of pendingChoice.options) {
+            const btn = document.createElement('button');
+            btn.className = 'btn-ornate talent-pick';
+            btn.innerHTML = `${o.icon} ${o.name}<small>${o.desc}</small>`;
+            btn.addEventListener('click', () => { p.chooseTalent(game, branch.id, o.id); this.renderTalents(game); });
+            col.appendChild(btn);
+          }
+        } else {
+          const btn = document.createElement('button');
+          btn.className = 'btn-ornate talent-spend';
+          const full = n >= BRANCH_CAP;
+          btn.textContent = full ? 'Path fully walked'
+            : pendingChoice ? `A choice awaits (${n}/${BRANCH_CAP})`
+            : `Spend (${n}/${BRANCH_CAP})`;
+          btn.disabled = full || p.talentPoints() <= 0;
+          btn.addEventListener('click', () => {
+            if (p.spendTalent(game, branch.id) === 'choice') return; // picker renders on refresh
+            this.renderTalents(game);
+          });
+          col.appendChild(btn);
+        }
+
+        // the Mastery Oath box — four states
+        const m = MASTERIES[branch.id];
+        const mDiv = document.createElement('div');
+        if (t.mastery === branch.id) {
+          mDiv.className = 'talent-mastery sworn';
+          mDiv.innerHTML = `${m.icon} <b>${m.name}</b><small>${m.passive}</small>`;
+        } else if (t.mastery) {
+          mDiv.className = 'talent-mastery elsewhere';
+          mDiv.innerHTML = `${m.icon} ${m.name}<small>You are sworn to ${MASTERIES[t.mastery].name.replace('Oath of the ', 'the ')}.</small>`;
+        } else if (n >= MASTERY_THRESHOLD) {
+          mDiv.className = 'talent-mastery eligible';
+          mDiv.innerHTML = `${m.icon} <b>${m.name}</b><small>${m.passive}</small>`;
+          const swear = document.createElement('button');
+          swear.className = 'btn-ornate talent-swear';
+          swear.textContent = 'Swear the Oath';
+          swear.addEventListener('click', () => {
+            this.hideTalents();
+            this.showDialog({
+              title: 'The Oath',
+              text: m.confirm,
+              buttons: [
+                { label: 'Swear it', primary: true, action: () => { this.hideDialog(); p.swearMastery(game, branch.id); this.showTalents(game); } },
+                { label: 'Not yet', action: () => { this.hideDialog(); this.showTalents(game); } },
+              ],
+            });
+          });
+          mDiv.appendChild(swear);
+        } else {
+          mDiv.className = 'talent-mastery locked';
+          mDiv.innerHTML = `${m.icon} ${m.name}<small>Walk ${MASTERY_THRESHOLD} ranks to swear this Oath.</small>`;
+        }
+        col.appendChild(mDiv);
         cols.appendChild(col);
       }
     },
@@ -603,7 +714,7 @@ export function createUi() {
     // ---------- boss mechanic warning ----------
     mechWarning(kind) {
       const el = $('mech-warning');
-      el.textContent = kind === 'jump' ? 'JUMP!' : 'MOVE!';
+      el.textContent = { jump: 'JUMP!', move: 'MOVE!', in: 'GET IN!' }[kind] || 'MOVE!';
       el.className = '';
       void el.offsetHeight; // restart the animation
       el.className = `mech-${kind}`;
@@ -645,9 +756,10 @@ export function createUi() {
       ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
       ctx.clip();
 
-      // underground, the map shows only darkness and what hunts nearby
-      if (game.zone === 'crypt') {
-        ctx.fillStyle = '#0c0a10';
+      // pocket zones sit outside the baked map image — solid zone tints
+      const pocketFill = { crypt: '#0c0a10', frostveil: '#16202e', sanctum: '#0a0816' }[game.zone];
+      if (pocketFill) {
+        ctx.fillStyle = pocketFill;
         ctx.fillRect(0, 0, S, S);
       }
 
@@ -704,6 +816,10 @@ function targetLabel(kind) {
     cinderwraith: 'Cinder Wraiths snuffed', ashhound: 'Ash Hounds put down',
     obsidiangolem: 'Obsidian Golems shattered', emberlord: 'Emberlord Vssaric ended',
     pyraxis: 'Pyraxis the Cinder Wyrm slain',
+    hoarfrostserpent: 'Hoarfrost Serpents stilled', frostfangstalker: 'Frostfang Stalkers put down',
+    rimeboundsentinel: 'Rimebound Sentinels shattered', hrimnir: 'The Avalanche-Jarl buried',
+    custodian: 'Astral Custodians retired', seraphel: 'Seraphel decommissioned',
+    noctyra: 'The Hollow Star concluded', thunderbristle: 'Thunderbristle felled',
     any: 'Creatures slain',
   }[kind] || kind;
 }

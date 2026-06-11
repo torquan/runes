@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { heightAt, HIGHLANDS } from './noise.js';
-import { buildBoar, buildWolf, buildHumanoid, buildDragon, animateBeast, animateHumanoid } from './characters.js';
+import { buildBoar, buildWolf, buildHumanoid, buildDragon, buildSerpent, animateBeast, animateHumanoid, animateSerpent } from './characters.js';
+import { choiceIs } from './talents.js';
+
+// Avenger's Pact: a clean telegraph dodge arms an 8s damage window
+function armAvenger(game) {
+  if (choiceIs(game.player.talents, 'bulwark', 21, 'avenger')) game.player.avengerT = 8;
+}
 
 const ENEMY_TYPES = {
   boar: {
@@ -191,6 +197,121 @@ const ENEMY_TYPES = {
     ],
     summons: { at: [0.75, 0.5, 0.25], kind: 'ashhound', count: 3 },
   },
+
+  // ===== The Frostveil (level 82–92) =====
+  hoarfrostserpent: {
+    // ranged kiter on the L82 sustain floor (646.8 DPS): hp ≈ 11s of player
+    // DPS = 7100; bolt avg 484 = ±11% spread, all damage on the bolt (no melee).
+    name: 'Hoarfrost Serpent', level: 82, hp: 7100, dmgMin: 0, dmgMax: 0, xp: 1232,
+    speed: 3.2, aggroRadius: 14, attackRange: 16, gold: [150, 280], respawn: 30,
+    leash: 36, wanderR: 1.5,
+    build: () => buildSerpent(),                       // NEW beast rig, faces +X
+    serpent: true,                                     // routes through animateSerpent
+    ranged: true, boltDmgMin: 430, boltDmgMax: 538, boltColor: 0x9fe8ff, boltSpeed: 19,
+  },
+  frostfangstalker: {
+    // fast 3-pack: hit 0.69×506.9≈350 (pack discount), hp 8s×677.6≈5400.
+    name: 'Frostfang Stalker', level: 86, hp: 5400, dmgMin: 312, dmgMax: 388, xp: 1367,
+    speed: 7.6, aggroRadius: 13, attackRange: 2.0, gold: [120, 220], respawn: 25,
+    leash: 30, wanderR: 3,
+    build: () => buildWolf('frost'),                   // wolf rig + palette arg
+  },
+  rimeboundsentinel: {
+    // slow solo sentry: hit 524 avg, hp 16.5s×700.7≈11600, armor 62 ≈ 19.5% of 318.5.
+    name: 'Rimebound Sentinel', level: 89, hp: 11600, dmgMin: 466, dmgMax: 582, xp: 1473,
+    speed: 2.6, aggroRadius: 9, attackRange: 3.2, gold: [380, 650], respawn: 60,
+    leash: 26, wanderR: 2, armor: 62,
+    build: () => { const g = buildHumanoid('rimebound'); g.scale.setScalar(1.7); return g; },
+    humanoid: true,
+  },
+  hrimnir: {
+    // zone elite: hit 661.5 avg, hp 50s×723.8≈36200 (TTK 50s, elite band), burst
+    // 39%×3760=1466, sustain floor maxHp 3008 → base L74. Summons stalkers twice.
+    name: 'Hrimnir, the Avalanche-Jarl', level: 92, hp: 36200, dmgMin: 595, dmgMax: 728, xp: 4222,
+    speed: 4.2, aggroRadius: 15, attackRange: 4.0, gold: [7000, 10000],
+    respawn: 240, leash: 60, wanderR: 2, armor: 60,
+    build: () => { const g = buildHumanoid('frostjarl'); g.scale.setScalar(2.4); return g; },
+    humanoid: true, elite: true,
+    mechanics: [{
+      kind: 'slam', interval: 8, telegraph: 1.5, radius: 9, dmg: 1466,
+      center: 'boss', avoid: 'jump', color: 0x9fe8ff,
+      warn: 'heaves the glacier — JUMP!',
+      dodgeMsg: 'You leap the avalanche as it rolls beneath you!',
+    }],
+    summons: { at: [0.6, 0.3], kind: 'frostfangstalker', count: 3 },
+  },
+
+  // ===== The Starfall Sanctum (level 96–105) =====
+  custodian: {
+    // dungeon 2–3 packs: hit 0.60×564.5≈339 (pack discount), hp 13s×754.6≈9800.
+    name: 'Astral Custodian', level: 96, hp: 9800, dmgMin: 305, dmgMax: 373, xp: 1737,
+    speed: 5.6, aggroRadius: 8, attackRange: 2.4, gold: [200, 360],
+    respawn: 600, wanderR: 1.5,
+    build: () => buildHumanoid('custodian'),
+    humanoid: true,
+  },
+  seraphel: {
+    // mid-boss: hit 718 avg, hp 120s×785.4≈94200, bursts 40%×4080=1632, floor L80.
+    // Two mechanics: starbeam-on-player (move) and orrery-slam (jump).
+    name: 'Seraphel, the Vault Warden', level: 100, hp: 94200, dmgMin: 646, dmgMax: 790, xp: 5064,
+    speed: 4.4, aggroRadius: 13, attackRange: 3.4, gold: [12000, 18000],
+    respawn: 240, leash: 80, wanderR: 2, armor: 68,
+    build: () => { const g = buildHumanoid('vaultwarden'); g.scale.setScalar(2.0); return g; },
+    humanoid: true, elite: true,
+    mechanics: [
+      { kind: 'zone', interval: 7, telegraph: 1.5, radius: 6, dmg: 1632,
+        center: 'player', avoid: 'move', color: 0xcfe8ff,
+        warn: 'lances a beam of starlight at your feet — MOVE!',
+        dodgeMsg: 'The starbeam scorches empty tiles.' },
+      { kind: 'slam', interval: 9, telegraph: 1.5, radius: 9, dmg: 1632,
+        center: 'boss', avoid: 'jump', color: 0xffd87a,
+        warn: 'drags the orrery down — JUMP!',
+        dodgeMsg: 'You leap the ring of falling brass!' },
+    ],
+    summons: { at: [0.6, 0.3], kind: 'custodian', count: 2 },
+  },
+  noctyra: {
+    // capstone: hit 753 avg, hp 200s×823.9≈164800, slam 42% / sanctuary 45% / rift
+    // 970+415-tick (Pyraxis ratios), sustain floor L84 base — at 96 her 342.4 dps
+    // vs 392/s heal throughput = 49.6/s margin, TTK 218s, bursts 46–49% of a 96.
+    name: 'Noctyra, the Hollow Star', level: 105, hp: 164800, dmgMin: 678, dmgMax: 828, xp: 8450,
+    speed: 4.6, aggroRadius: 16, attackRange: 3.8, gold: [26000, 38000],
+    respawn: 300, leash: 80, wanderR: 2, armor: 72,
+    build: () => { const g = buildHumanoid('hollowstar'); g.scale.setScalar(2.4); return g; },
+    humanoid: true, elite: true,
+    mechanics: [
+      { kind: 'slam', interval: 10, telegraph: 1.5, radius: 10, dmg: 1798,   // 42% of 4280
+        center: 'boss', avoid: 'jump', color: 0xffd87a,
+        warn: 'lets her weight return — JUMP!', dodgeMsg: 'You leap the gravity wave!' },
+      { kind: 'firepatch', interval: 12, telegraph: 1.4, radius: 4.5, dmg: 970,   // Pyraxis ratios
+        lingerDmg: 415, linger: 20, center: 'player', avoid: 'move', color: 0x6a5acd,
+        warn: 'tears a rift where you stand — MOVE, and stay out!',
+        dodgeMsg: 'The rift gnaws on empty floor.' },
+      { kind: 'sanctuary', interval: 13, telegraph: 1.6, radius: 5.5, dmg: 1926,  // 45% — NEW kind, §5
+        center: 'boss', avoid: 'in', color: 0xfff2c0,
+        warn: 'draws every light into her shadow — GET IN!',
+        dodgeMsg: 'You shelter in the umbra as the starfire falls.' },
+    ],
+    summons: { at: [0.75, 0.5, 0.25], kind: 'custodian', count: 2 },
+  },
+
+  // ===== meadow rare spawn (secret) =====
+  thunderbristle: {
+    // L97 rare boar: hit 697 avg, hp 55s×762.3≈41900, slam 40%×3960=1584;
+    // leash 50 < home dist 53.8 so he can never reach the campfire.
+    name: 'Thunderbristle, Sire of All Boars', level: 97, hp: 41900, dmgMin: 627, dmgMax: 767, xp: 4738,
+    speed: 5.0, aggroRadius: 22, attackRange: 3.4, gold: [9000, 14000],
+    respawn: 900, leash: 50, wanderR: 4,
+    build: () => { const g = buildBoar(true, 'gold'); g.scale.setScalar(3.2); return g; },  // beast: +X
+    elite: true,
+    mechanics: [{
+      kind: 'slam', interval: 9, telegraph: 1.5, radius: 9, dmg: 1584,
+      center: 'boss', avoid: 'jump', color: 0xffaa30,
+      warn: 'rears up on hooves the size of cartwheels — JUMP!',
+      dodgeMsg: 'You leap as the meadow itself bounces.',
+    }],
+    summons: { at: [0.5], kind: 'boar', count: 4 },   // four LEVEL-1 Young Boars (auto-temporary)
+  },
 };
 
 export const TRIAL_SITES = {
@@ -203,6 +324,8 @@ export const HIGHLANDS_SITES = {
   emberlord: { x: 178, z: -40 },   // elite sub-area, north basin
   pyraxis:   { x: 196, z: 40 },    // world-boss arena, far east shelf
 };
+
+export const FROSTVEIL_SITES = { hrimnir: { x: -345, z: 32 } };
 
 function makeRng(seed) {
   let s = seed >>> 0;
@@ -325,6 +448,56 @@ export function spawnEnemies(scene) {
   enemies.push(emberlord, pyraxis);
   scene.add(emberlord.group, pyraxis.group);
 
+  // ---- The Frostveil: serpents/stalkers/sentinels, Hrimnir on his knoll ----
+  // The pocket is portal-gated (arch at (−108,18) needs pyraxis-slain or L78), so
+  // eager spawning is safe and nothing here can be pulled from the valley. Arrival
+  // (−263,0) clears every solo serpent's 15.5 pull reach; spawns keep ≥4u off walls.
+  const frostveilSpawns = [
+    // Hoarfrost Serpents — solo kiters (pull reach 15.5; arrival (−263,0) clears all ✓)
+    ['hoarfrostserpent', -285,  12], ['hoarfrostserpent', -295, -18], ['hoarfrostserpent', -310, 26],
+    // Frostfang Stalker 3-packs
+    ['frostfangstalker', -300, -34], ['frostfangstalker', -302, -31], ['frostfangstalker', -298, -37],
+    ['frostfangstalker', -326,  18], ['frostfangstalker', -328,  21], ['frostfangstalker', -324, 15],
+    // Rimebound Sentinels — solo sentries on the moraine line
+    ['rimeboundsentinel', -318, -8], ['rimeboundsentinel', -332, -22], ['rimeboundsentinel', -344, 6],
+  ];
+  for (const [kind, x, z] of frostveilSpawns) {
+    const e = makeEnemy(kind, x, z);
+    enemies.push(e);
+    scene.add(e.group);
+  }
+  const hrimnir = makeEnemy('hrimnir', FROSTVEIL_SITES.hrimnir.x, FROSTVEIL_SITES.hrimnir.z);
+  enemies.push(hrimnir);
+  scene.add(hrimnir.group);
+
+  // ---- The Starfall Sanctum: Astral Custodian packs, Seraphel, Noctyra ----
+  // Fissure-gated (needs hrimnir-slain or L92); dungeon trash respawn 600 so cleared
+  // rooms stay cleared, bosses leash 80 (whole-dungeon). Arrival (0,263) clears the
+  // entry pair's 9.5 reach; every spawn keeps a ≥4u wall margin (LOS-less aggro).
+  const sanctumSpawns = [
+    [-6, 274], [-4, 276],                                  // entry pair
+    [-7, 297], [-5, 299], [7, 302], [5, 304], [-7, 309], [-5, 311],   // mid-hall packs
+    [0, 322],                                              // corridor-B sentry
+    [-6, 331], [6, 331], [7, 338],                         // final-hall guard
+  ];
+  for (const [x, z] of sanctumSpawns) {
+    const e = makeEnemy('custodian', x, z);
+    enemies.push(e);
+    scene.add(e.group);
+  }
+  const seraphel = makeEnemy('seraphel', 0, 306);
+  const noctyra = makeEnemy('noctyra', 0, 338);
+  enemies.push(seraphel, noctyra);
+  scene.add(seraphel.group, noctyra.group);
+
+  // ---- meadow rare spawn: Thunderbristle, in the level-1 boar ring (secret) ----
+  // Nudge ±3u off any high ground, mirroring the boar-scatter heightAt>8 rule.
+  let tbX = 44, tbZ = 31;
+  if (heightAt(tbX, tbZ) > 8) { tbX += 3; tbZ -= 3; }
+  const thunderbristle = makeEnemy('thunderbristle', tbX, tbZ);
+  enemies.push(thunderbristle);
+  scene.add(thunderbristle.group);
+
   return enemies;
 }
 
@@ -398,6 +571,34 @@ export function spawnGateNpc(scene) {
     name: 'Emberwarden Kaska',
     group,
     anim: { moving: false, speed: 1, attackT: -1, dead: false },
+  };
+}
+
+// The two expansion questgivers: Surveyor Odda waits by the Frostveil arrival
+// arch, Archivist Fenwick frets by the Sanctum fissure. Same shape as the other
+// NPC factories; both clear their nearest pull (margins verified in the spec).
+export function spawnExpansionNpcs(scene) {
+  const odda = buildHumanoid('odda');
+  placeOnGround(odda, -268, -4);
+  odda.rotation.y = Math.atan2(-260 - -268, 0 - -4);   // face the arrival arch (−260,0)
+  odda.castShadow = true;
+
+  const fenwick = buildHumanoid('fenwick');
+  placeOnGround(fenwick, -299, 2);
+  fenwick.rotation.y = Math.atan2(-305 - -299, 8 - 2);  // face the fissure (−305,8)
+  fenwick.castShadow = true;
+
+  return {
+    odda: {
+      name: 'Surveyor Odda',
+      group: odda,
+      anim: { moving: false, speed: 1, attackT: -1, dead: false },
+    },
+    fenwick: {
+      name: 'Archivist Fenwick',
+      group: fenwick,
+      anim: { moving: false, speed: 1, attackT: -1, dead: false },
+    },
   };
 }
 
@@ -518,6 +719,7 @@ function castMechanic(game, e, mech) {
   game.ui.log(`${e.name} ${mech.warn}`, 'log-in');
   game.ui.mechWarning(mech.avoid);
   if (mech.avoid === 'jump') game.audio.warnJump();
+  else if (mech.avoid === 'in') game.audio.warnIn();   // inverted "sanctuary" telegraph
   else game.audio.warnMove();
 }
 
@@ -543,9 +745,22 @@ function updateTelegraphs(game, dt) {
     const p = game.player;
     if (!p.alive) continue;
     const dist = Math.hypot(p.group.position.x - tg.x, p.group.position.z - tg.z);
+    // sanctuary (avoid 'in'): the circle is the ONLY safe ground — inverted.
+    // Jumping does not save you; you must consciously step into the umbra.
+    if (tg.mech.kind === 'sanctuary') {
+      if (dist <= tg.mech.radius + 0.4) {            // INSIDE = sheltered
+        game.ui.log(tg.mech.dodgeMsg, 'log-sys');
+        game.ui.floatText(p.group.position, 'Sheltered!', 'heal');
+        armAvenger(game);
+      } else {
+        p.takeDamage(game, tg.mech.dmg, tg.source);  // outside = full burst, anywhere
+      }
+      continue;
+    }
     if (dist > tg.mech.radius + 0.4) {
       if (tg.mech.avoid === 'move' && dist < tg.mech.radius + 6) {
         game.ui.log(tg.mech.dodgeMsg, 'log-sys');
+        armAvenger(game);
       }
       continue;
     }
@@ -554,6 +769,7 @@ function updateTelegraphs(game, dt) {
       if (air > 0.7) {
         game.ui.log(tg.mech.dodgeMsg, 'log-sys');
         game.ui.floatText(p.group.position, 'Dodged!', 'heal');
+        armAvenger(game);
         continue;
       }
     }
@@ -730,6 +946,7 @@ export function updateEnemies(game, dt, elapsed) {
     }
 
     if (e.humanoid) animateHumanoid(e.group, e.anim, elapsed + e.home.x);
+    else if (t.serpent) animateSerpent(e.group, e.anim, elapsed + e.home.x); // undulating beast rig
     else animateBeast(e.group, e.anim, elapsed + e.home.x); // offset so herds don't sync
   }
 
