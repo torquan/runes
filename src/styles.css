@@ -293,6 +293,28 @@ body {
 }
 .key-chip { font-size: 0.78rem; padding: 2px 8px; }
 
+/* ---------- boss mechanic warning ---------- */
+#mech-warning {
+  position: absolute; left: 50%; top: 26%; transform: translateX(-50%);
+  font-family: 'Cinzel Decorative', serif; font-weight: 900; font-size: 3rem;
+  letter-spacing: 0.12em; pointer-events: none; opacity: 0; white-space: nowrap;
+}
+#mech-warning.mech-jump {
+  color: #ffd76e; text-shadow: 0 0 30px rgba(255, 190, 60, .9), 0 3px 6px #000;
+  animation: mech-flash 1.5s ease-out;
+}
+#mech-warning.mech-move {
+  color: #ff5a3c; text-shadow: 0 0 30px rgba(255, 70, 40, .9), 0 3px 6px #000;
+  animation: mech-flash 1.5s ease-out;
+}
+@keyframes mech-flash {
+  0% { opacity: 0; transform: translateX(-50%) scale(0.4); }
+  12% { opacity: 1; transform: translateX(-50%) scale(1.2); }
+  24% { transform: translateX(-50%) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) scale(1); }
+}
+
 /* ---------- quest dialog ---------- */
 #quest-dialog {
   position: absolute; inset: 0; display: grid; place-items: center;

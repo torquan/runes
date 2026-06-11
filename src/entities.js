@@ -298,7 +298,9 @@ function castMechanic(game, e, mech) {
   fill.scale.setScalar(0.01);
   telegraphs.push({ x, z, mech, t: 0, ring, fill, source: e });
   game.ui.log(`${e.name} ${mech.warn}`, 'log-in');
-  game.audio.cast();
+  game.ui.mechWarning(mech.avoid);
+  if (mech.avoid === 'jump') game.audio.warnJump();
+  else game.audio.warnMove();
 }
 
 function updateTelegraphs(game, dt) {

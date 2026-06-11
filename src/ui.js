@@ -352,6 +352,15 @@ export function createUi() {
     hideShop() { $('shop-panel').classList.add('hidden'); },
     shopOpen() { return !$('shop-panel').classList.contains('hidden'); },
 
+    // ---------- boss mechanic warning ----------
+    mechWarning(kind) {
+      const el = $('mech-warning');
+      el.textContent = kind === 'jump' ? 'JUMP!' : 'MOVE!';
+      el.className = '';
+      void el.offsetHeight; // restart the animation
+      el.className = `mech-${kind}`;
+    },
+
     // ---------- prompts & splashes ----------
     setInteractPrompt(visible, label) {
       $('interact-prompt').classList.toggle('hidden', !visible);

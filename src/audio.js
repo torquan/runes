@@ -65,4 +65,7 @@ export const sfx = {
   select()    { tone(440, 'triangle', 0.01, 0.2, 0.35); tone(660, 'triangle', 0.01, 0.3, 0.3, 0, 0.08); },
   death()     { [330, 262, 196, 131].forEach((f, i) => tone(f, 'triangle', 0.02, 0.5, 0.4, 0, i * 0.22)); },
   arrow()     { noiseBurst(0.12, 4000, 0.5); },
+  // boss mechanic warnings: rising = get airborne, falling klaxon = get out
+  warnJump()  { tone(440, 'square', 0.01, 0.14, 0.4); tone(660, 'square', 0.01, 0.22, 0.4, 0, 0.13); },
+  warnMove()  { tone(370, 'sawtooth', 0.01, 0.14, 0.45); tone(247, 'sawtooth', 0.01, 0.22, 0.45, 0, 0.13); },
 };
