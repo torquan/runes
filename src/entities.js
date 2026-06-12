@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { heightAt, HIGHLANDS } from './noise.js';
-import { buildBoar, buildWolf, buildHumanoid, buildDragon, buildSerpent, animateBeast, animateHumanoid, animateSerpent } from './characters.js';
+import { buildBoar, buildWolf, buildHumanoid, buildDragon, buildSerpent, buildSporeling, animateBeast, animateHumanoid, animateSerpent, animateSporeling } from './characters.js';
 import { choiceIs } from './talents.js';
 
 // Avenger's Pact: a clean telegraph dodge arms an 8s damage window
@@ -312,6 +312,76 @@ const ENEMY_TYPES = {
     }],
     summons: { at: [0.5], kind: 'boar', count: 4 },   // four LEVEL-1 Young Boars (auto-temporary)
   },
+
+  // ===== The Verdant Hollow (level 106–118) =====
+  sporecaller: {
+    // ranged caster (NEW rig): bolt avg 540 ≈ sustain at the zone floor; hp 9150.
+    name: 'Sporecaller', level: 106, hp: 9150, dmgMin: 0, dmgMax: 0, xp: 1880,
+    speed: 3.2, aggroRadius: 14, attackRange: 16, gold: [200, 360], respawn: 30,
+    leash: 36, wanderR: 1.5,
+    build: () => buildSporeling(),                 // NEW rig (faces +X, beast formula)
+    sporeling: true,                               // routes the animateSporeling branch
+    ranged: true, boltDmgMin: 481, boltDmgMax: 599, boltColor: 0xff5ea8, boltSpeed: 18,
+  },
+  hollowstalker: {
+    // fast 3-pack hunter; wolf rig + 'verdant' palette (mossy fur, pink eyes).
+    name: 'Hollowstalker', level: 110, hp: 6900, dmgMin: 317, dmgMax: 387, xp: 2090,
+    speed: 7.6, aggroRadius: 13, attackRange: 2.0, gold: [160, 300], respawn: 25,
+    leash: 30, wanderR: 3,
+    build: () => buildWolf('verdant'),             // wolf rig + NEW palette arg
+  },
+  bloomwarden: {
+    // slow armored sentry (a person the Hollow grew through); armor 78 ≈ 19% of L113.
+    name: 'Bloomwarden', level: 113, hp: 15000, dmgMin: 485, dmgMax: 595, xp: 2320,
+    speed: 2.6, aggroRadius: 9, attackRange: 3.2, gold: [460, 780], respawn: 60,
+    leash: 26, wanderR: 2, armor: 78,
+    build: () => { const g = buildHumanoid('bloomwarden'); g.scale.setScalar(1.8); return g; },
+    humanoid: true,
+  },
+  swarmling: {
+    // soft trash, passive until hit (aggroRadius 0 = the "young boar" of the zone).
+    name: 'Mycelial Swarmling', level: 108, hp: 5100, dmgMin: 360, dmgMax: 460, xp: 1700,
+    speed: 4.0, aggroRadius: 0, attackRange: 1.8, gold: [120, 240], respawn: 18,
+    leash: 32, wanderR: 5,
+    build: () => buildBoar(false, 'verdant'),      // reuse boar rig + 'verdant' palette
+  },
+  spireshade: {
+    // elite (Emberlord/Hrimnir role): TTK ~50s, zone burst 39%, summons the green hunt.
+    name: 'Spireshade, the Mother-Bloom', level: 116, hp: 47200, dmgMin: 595, dmgMax: 725, xp: 5200,
+    speed: 4.2, aggroRadius: 15, attackRange: 4.0, gold: [9000, 13000],
+    respawn: 240, leash: 60, wanderR: 2, armor: 74,
+    build: () => { const g = buildHumanoid('bloomwarden'); g.scale.setScalar(2.4); return g; },
+    humanoid: true, elite: true,
+    mechanics: [{
+      kind: 'zone', interval: 8, telegraph: 1.5, radius: 6, dmg: 1840,   // 39% of L116 maxHp 4720
+      center: 'player', avoid: 'move', color: 0xff5ea8,
+      warn: 'erupts a spore-bloom beneath you — MOVE!',
+      dodgeMsg: 'The bloom bursts on bare moss.',
+    }],
+    summons: { at: [0.6, 0.3], kind: 'hollowstalker', count: 3 },
+  },
+  vorthal: {
+    // world boss, tuned to L118: sustain floor 0.08×4800=384/s; HP ≈ 200s×924.
+    // Bursts 42–46% of 4800 (near-lethal, dodgeable). ONLY existing mechanic kinds.
+    name: 'Vorthal, the First Root', level: 118, hp: 184800, dmgMin: 760, dmgMax: 930, xp: 9400,
+    speed: 4.6, aggroRadius: 18, attackRange: 5.0, gold: [30000, 44000],
+    respawn: 300, leash: 90, wanderR: 2, armor: 80,
+    build: () => { const g = buildDragon(); g.scale.setScalar(1.35); return g; },  // beast +X
+    elite: true,
+    mechanics: [
+      { kind: 'slam', interval: 10, telegraph: 1.5, radius: 10, dmg: 2016,        // 42% of 4800
+        center: 'boss', avoid: 'jump', color: 0x9fffb0,
+        warn: 'heaves the whole grotto upward — JUMP!', dodgeMsg: 'You leap the buckling floor!' },
+      { kind: 'zone', interval: 8, telegraph: 1.5, radius: 7, dmg: 2112,          // 44%
+        center: 'player', avoid: 'move', color: 0xff5ea8,
+        warn: 'lashes a root at your feet — MOVE!', dodgeMsg: 'The root cracks bare stone.' },
+      { kind: 'firepatch', interval: 12, telegraph: 1.4, radius: 4.5, dmg: 1000,  // creeping rot, lingers
+        lingerDmg: 430, linger: 20, center: 'player', avoid: 'move', color: 0x7a4eff,
+        warn: 'sows devouring rot where you stand — MOVE, and stay out!',
+        dodgeMsg: 'The rot blooms on empty ground.' },
+    ],
+    summons: { at: [0.75, 0.5, 0.25], kind: 'hollowstalker', count: 3 },
+  },
 };
 
 export const TRIAL_SITES = {
@@ -326,6 +396,8 @@ export const HIGHLANDS_SITES = {
 };
 
 export const FROSTVEIL_SITES = { hrimnir: { x: -345, z: 32 } };
+
+export const HOLLOW_SITES = { vorthal: { x: 0, z: -345 }, spireshade: { x: -30, z: -300 } };
 
 function makeRng(seed) {
   let s = seed >>> 0;
@@ -490,6 +562,33 @@ export function spawnEnemies(scene) {
   enemies.push(seraphel, noctyra);
   scene.add(seraphel.group, noctyra.group);
 
+  // ---- The Verdant Hollow: sporecallers/hollowstalkers/bloomwardens/swarmlings, ----
+  // ---- Spireshade in the glow-pool basin, Vorthal at the spiral's center ----
+  // Gated entry at z −258 needs noctyra-slain or L102, so eager spawning is safe —
+  // nothing here can be pulled from elsewhere (same reasoning as the Frostveil). Every
+  // spawn keeps z>-275 (off the entry line), |x|<54 (≥4u off walls), and ≥6u off the
+  // boss/elite sites; small aggroRadius+wanderR prevent LOS-less chain-pulls.
+  const hollowSpawns = [
+    // Sporecallers (ranged) — spread so they kite singly (small wanderR already)
+    ['sporecaller', -38, -288], ['sporecaller', 36, -292], ['sporecaller', -20, -318], ['sporecaller', 24, -322],
+    // Hollowstalker 3-packs — kept ≥6u off the spireshade basin (-30,-300)
+    ['hollowstalker', -44, -296], ['hollowstalker', -46, -299], ['hollowstalker', -42, -293],
+    ['hollowstalker', 30, -312], ['hollowstalker', 28, -315], ['hollowstalker', 32, -309],
+    // Bloomwardens — slow sentries, solo
+    ['bloomwarden', -12, -282], ['bloomwarden', 14, -286], ['bloomwarden', 0, -326],
+    // Mycelial Swarmlings — passive trash herd (aggroRadius 0)
+    ['swarmling', -42, -300], ['swarmling', 40, -300], ['swarmling', -44, -318], ['swarmling', 42, -318], ['swarmling', -46, -330],
+  ];
+  for (const [kind, x, z] of hollowSpawns) {
+    const e = makeEnemy(kind, x, z);
+    enemies.push(e);
+    scene.add(e.group);
+  }
+  const spireshadeE = makeEnemy('spireshade', HOLLOW_SITES.spireshade.x, HOLLOW_SITES.spireshade.z);
+  const vorthal = makeEnemy('vorthal', HOLLOW_SITES.vorthal.x, HOLLOW_SITES.vorthal.z);
+  enemies.push(spireshadeE, vorthal);
+  scene.add(spireshadeE.group, vorthal.group);
+
   // ---- meadow rare spawn: Thunderbristle, in the level-1 boar ring (secret) ----
   // Nudge ±3u off any high ground, mirroring the boar-scatter heightAt>8 rule.
   let tbX = 44, tbZ = 31;
@@ -597,6 +696,23 @@ export function spawnExpansionNpcs(scene) {
     fenwick: {
       name: 'Archivist Fenwick',
       group: fenwick,
+      anim: { moving: false, speed: 1, attackT: -1, dead: false },
+    },
+  };
+}
+
+// Greta Thornby, botanist-in-exile, runs the Verdant Hollow surface chain.
+// She waits just off the entry-grove arch (z −258) by her first signpost,
+// taking notes while the vale tries to eat her. Same factory shape as the rest.
+export function spawnHollowNpc(scene) {
+  const greta = buildHumanoid('greta');
+  placeOnGround(greta, -6, -262);                       // beside the entry sign (0,−262), clear of the arch line
+  greta.rotation.y = Math.atan2(0 - -6, -258 - -262);   // face the arrival arch (0,−258)
+  greta.castShadow = true;
+  return {
+    greta: {
+      name: 'Greta Thornby',
+      group: greta,
       anim: { moving: false, speed: 1, attackT: -1, dead: false },
     },
   };
@@ -947,6 +1063,7 @@ export function updateEnemies(game, dt, elapsed) {
 
     if (e.humanoid) animateHumanoid(e.group, e.anim, elapsed + e.home.x);
     else if (t.serpent) animateSerpent(e.group, e.anim, elapsed + e.home.x); // undulating beast rig
+    else if (t.sporeling) animateSporeling(e.group, e.anim, elapsed + e.home.x); // glowcap caster rig
     else animateBeast(e.group, e.anim, elapsed + e.home.x); // offset so herds don't sync
   }
 

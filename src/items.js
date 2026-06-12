@@ -115,6 +115,18 @@ export const UNIQUES = {
     flavor: 'Everything that held the door shut, distilled. The door is you now.',
   },
 
+  // ===== expansion (The Verdant Hollow) uniques =====
+  spireshade: {       // Hollow elite mini-boss, L116
+    id: 'mother_bloom_seed', name: 'Seed of the Mother-Bloom', slot: 'trinket', rarity: 'legendary', unique: true,
+    stats: { hp: 520, crit: 0.07, healPower: 0.055 },   // power ≈ 270 vs ~232 baseline = 1.16×
+    flavor: 'Still warm, still wanting to grow. Keep it in a closed fist.',
+  },
+  vorthal: {          // Hollow world boss, L118 — zone BiS, a RELIC (Last-Seal class)
+    id: 'the_first_root', name: 'The First Root', slot: 'relic', rarity: 'legendary', unique: true,
+    stats: { dmg: 132, hp: 520, crit: 0.06, healPower: 0.052 },  // power ≈ 392 vs ~245 baseline = 1.60×
+    flavor: 'The oldest thing in Taborea, and it answered to you. The garden remembers its gardener.',
+  },
+
   // secret rewards (pseudo-kind keys; granted via makeUnique(key), never dropped):
   vargoth_vault: {
     id: 'vargoths_spare_crown', name: "Vargoth's Spare Crown", slot: 'trinket', rarity: 'legendary', unique: true,
@@ -131,6 +143,16 @@ export const UNIQUES = {
     stats: { dmg: 150, speed: 0.03 },              // ≈ epic ilvl 100; the only speed weapon
     flavor: 'It is a fish. You are hitting things with a fish. Neither of you is forgiven.',
   },
+  greta_pressed: {  // Hollow coda quest reward, granted via makeUnique('greta_pressed')
+    id: 'pressed_bloom', name: "Greta's Pressed Bloom", slot: 'trinket', rarity: 'legendary', unique: true,
+    stats: { hp: 240, healPower: 0.05 },           // a quieter, sentimental BiS-adjacent piece
+    flavor: 'A flower from a person, pressed flat in a field journal. She wanted someone to keep it. So do you.',
+  },
+  glowcap_carbine: {  // Hollow weapon BiS, ~3% sporecaller rare drop (granted via makeUnique)
+    id: 'glowcap_carbine', name: 'The Glowcap Carbine', slot: 'weapon', rarity: 'legendary', unique: true,
+    stats: { dmg: 220, crit: 0.025 },              // power ≈ 270, weapon BiS for the band
+    flavor: 'A mushroom that learned to spit back. It glows when it is happy, which is whenever it is hitting something.',
+  },
 };
 
 // elites that also drop uniques + the trial/crypt bosses
@@ -141,8 +163,11 @@ const TRIAL_CRYPT_BOSSES = new Set(['korgrim', 'vexnar', 'morgrath', 'ossus', 'v
 // trash/elite families that can roll the relic slot; bosses that drop guaranteed
 // epics weighted toward relic + a unique. Existing mobs are in NEITHER set, so
 // their drops are byte-identical to before.
-const EXPANSION_KINDS = new Set(['hoarfrostserpent', 'frostfangstalker', 'rimeboundsentinel', 'custodian']);
-const EXPANSION_BOSSES = new Set(['hrimnir', 'seraphel', 'noctyra']);
+const EXPANSION_KINDS = new Set([
+  'hoarfrostserpent', 'frostfangstalker', 'rimeboundsentinel', 'custodian',
+  'sporecaller', 'hollowstalker', 'bloomwarden', 'swarmling',   // Verdant Hollow trash
+]);
+const EXPANSION_BOSSES = new Set(['hrimnir', 'seraphel', 'noctyra', 'spireshade', 'vorthal']);
 
 // ---------- small helpers ----------
 export function rollUid() {
@@ -303,6 +328,13 @@ export function rollDrops(enemy) {
       if (u) drops.push(u);
     }
     return drops;
+  }
+
+  // the Hollow weapon BiS: a rare flower-spit carbine off the casters (additive
+  // to the normal trash roll below — a sporecaller can drop both).
+  if (kind === 'sporecaller' && Math.random() < 0.03) {
+    const u = makeUnique('glowcap_carbine');
+    if (u) drops.push(u);
   }
 
   // trash: 18% to drop a single low item. Expansion trash families roll the same

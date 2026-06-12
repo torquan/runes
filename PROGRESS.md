@@ -8,7 +8,7 @@ each iteration ends in a green `vite build` and a commit.
 | # | Iteration | Status |
 | --- | --- | --- |
 | 1 | Design pass → `EXPANSION.md` spec ("The Hollow Hour", 106–120) | ✅ done |
-| 2 | **A** — The Verdant Hollow zone (106–118): mobs, Greta's chain, Vorthal | pending |
+| 2 | **A** — The Verdant Hollow zone (106–118): mobs, Greta's chain, Vorthal | ✅ done |
 | 3 | **B** — The Last Hour dungeon (116–120): 4 NEW mechanic kinds, cap → 120 | pending |
 | 4 | **C** — Crafting/gathering + item sets + new class skills | pending |
 | 5 | **D** — Achievements/Bestiary panel (K) + titles | pending |
@@ -49,3 +49,29 @@ parallel authors on disjoint new files → single integrator for hub files
   - ONE save bump v4 → v5 collecting every new field; geography verified
     against `noise.js` (heightAt checks x AND z, no pocket overlaps).
 - Committed with this log entry.
+
+### Iteration 2 — A: The Verdant Hollow (2026-06-12) ✅
+
+- Workflow `iteration-a-verdant-hollow`: planner (binding interface
+  contracts) → 4 parallel authors with strict file ownership → integrator
+  (hub wiring + save v5) → build + adversarial review + Chrome smoke test.
+  13 agents, ~940k subagent tokens. Integrator agent crashed to an API
+  overload *after* landing its wiring; fix rounds + smoke confirmed it.
+- Shipped: `src/hollow.js` (south-pocket grotto-vale: emerald moss floor,
+  bracket-fungus shelves, magenta glowcaps, glow-pools, olive-black sky),
+  HOLLOW pocket + heightAt profile + ZONE_BOUNDS in `noise.js`, sporeling
+  rig + verdant palettes in `characters.js`, 6 ENEMY_TYPES families +
+  Mother-Bloom elite Spireshade L116 + world boss Vorthal L118 in
+  `entities.js`, ilvl 106–120 tier + 4 uniques in `items.js`, Greta
+  Thornby's 8-step chain + bounty in `quests.js`, zone/portal/minimap/save
+  wiring in `main.js`/`ui.js`/`sanctum.js` (descent portal from the
+  Sanctum, gate: Noctyra slain OR level 102). Save schema → **v5** with
+  ALL Hollow-Hour fields default-filled (later iterations ride it).
+- Smoke test (Chrome, real portal flow): zone entry, ground clamping, all
+  6 families at spec HP, single-pull kill with exact spec XP, Greta dialog
+  + accept, v5 save/load roundtrip, zero console errors.
+- Post-review fix applied by orchestrator: moved `spireshade` from
+  ELITE_NAMED → EXPANSION_BOSSES (spec §A.8 drop tier, hrimnir precedent).
+- Known cosmetic quirks (accepted): Sanctum return point sits 2u from the
+  descent portal (F-triggered, no loop); Hollow arrival is on the steep
+  entry ramp (frostveil idiom).

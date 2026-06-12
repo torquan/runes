@@ -42,6 +42,9 @@ export const FROSTVEIL = { x1: -360, x2: -250, z1: -60, z2: 60 };
 // The Starfall Sanctum: the dungeon pocket north of everything, flat floor.
 export const SANCTUM = { x1: -60, x2: 60, z1: 250, z2: 360, floor: 40 };
 
+// The Verdant Hollow: SANCTUM's southern mirror — an OUTDOOR pocket (own noise profile + ground mesh in hollow.js).
+export const HOLLOW = { x1: -60, x2: 60, z1: -360, z2: -250 };
+
 // Per-zone playable bounds (player clamp + Dash clamp read these — one truth).
 // 'highlands' shares the continuous overworld box.
 export const ZONE_BOUNDS = {
@@ -50,6 +53,7 @@ export const ZONE_BOUNDS = {
   crypt:     { x1: 252, x2: 358, z1: -58, z2: 58 },
   frostveil: { x1: -358, x2: -252, z1: -58, z2: 58 },
   sanctum:   { x1: -58, x2: 58, z1: 252, z2: 358 },
+  hollow:    { x1: -58, x2: 58, z1: -358, z2: -252 },
 };
 
 // The Ashen Highlands: the eastern shelf of the same continuous map. NOT a
@@ -72,6 +76,19 @@ export function inHighlands(x) { return x > HIGHLANDS.GATE_X; }
 export function heightAt(x, z) {
   if (x > CRYPT.x1 && x < CRYPT.x2 && z > CRYPT.z1 && z < CRYPT.z2) return CRYPT.floor;
   if (x > SANCTUM.x1 && x < SANCTUM.x2 && z > SANCTUM.z1 && z < SANCTUM.z2) return SANCTUM.floor;
+
+  // the Verdant Hollow: a sunken bioluminescent grotto — rolling moss humps, one
+  // flat central glow-pool basin, steep grotto walls at every pocket edge
+  if (x > HOLLOW.x1 && x < HOLLOW.x2 && z > HOLLOW.z1 && z < HOLLOW.z2) {
+    let h = 14
+      + fbm(x * 0.035 + 880.3, z * 0.035 + 220.9, 4) * 6
+      + fbm(x * 0.10 + 60.2, z * 0.10 + 410.1, 3) * 1.6;
+    const dP = Math.hypot(x - 0, z - (-305));
+    if (dP < 22) h = 13 + (h - 13) * smooth(dP / 22);
+    const dE = Math.min(x - HOLLOW.x1, HOLLOW.x2 - x, z - HOLLOW.z1, HOLLOW.z2 - z);
+    if (dE < 12) h += (12 - dE) * (12 - dE) * 0.35;
+    return h;
+  }
 
   // the Frostveil: a glacial crater-vale — rolling snowfield, one flat frozen
   // tarn (the Sanctum's roof), steep moraine walls at every pocket edge

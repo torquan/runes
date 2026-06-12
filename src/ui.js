@@ -144,6 +144,7 @@ export function createUi() {
         highlands: 'The Ashen Highlands',
         frostveil: 'The Frostveil',
         sanctum: 'The Starfall Sanctum',
+        hollow: 'The Verdant Hollow',
       }[game.zone] || 'Howling Plains';
 
       // target frame
@@ -263,7 +264,7 @@ export function createUi() {
     // highland update never blanks Barnaby's tracked quests, and vice versa.
     refreshQuestTracker() {
       const game = window.__game;
-      const chains = [game.quests, game.highlandQuests, game.frostveilQuests, game.sanctumQuests].filter(Boolean);
+      const chains = [game.quests, game.highlandQuests, game.frostveilQuests, game.sanctumQuests, game.hollowQuests].filter(Boolean);
       const wrap = $('quest-entries');
       wrap.innerHTML = '';
       const visible = [];
@@ -757,7 +758,7 @@ export function createUi() {
       ctx.clip();
 
       // pocket zones sit outside the baked map image — solid zone tints
-      const pocketFill = { crypt: '#0c0a10', frostveil: '#16202e', sanctum: '#0a0816' }[game.zone];
+      const pocketFill = { crypt: '#0c0a10', frostveil: '#16202e', sanctum: '#0a0816', hollow: '#0e1c10' }[game.zone];
       if (pocketFill) {
         ctx.fillStyle = pocketFill;
         ctx.fillRect(0, 0, S, S);
@@ -820,6 +821,9 @@ function targetLabel(kind) {
     rimeboundsentinel: 'Rimebound Sentinels shattered', hrimnir: 'The Avalanche-Jarl buried',
     custodian: 'Astral Custodians retired', seraphel: 'Seraphel decommissioned',
     noctyra: 'The Hollow Star concluded', thunderbristle: 'Thunderbristle felled',
+    sporecaller: 'Sporecallers silenced', hollowstalker: 'Hollowstalkers grounded',
+    bloomwarden: 'Bloomwardens laid to rest', swarmling: 'Mycelial Swarmlings culled',
+    spireshade: 'Spireshade the Mother-Bloom slain', vorthal: 'Vorthal the First Root uprooted',
     any: 'Creatures slain',
   }[kind] || kind;
 }

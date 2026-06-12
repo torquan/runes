@@ -34,6 +34,9 @@ export const CLASS_STYLES = {
   hollowstar: { tunic: 0x0d0a1c, trim: 0xffd87a, weapon: 'none',  skin: 0x14182e },  // Noctyra the Hollow Star
   odda:       { tunic: 0x5a6a4a, trim: 0xc9a14a, weapon: 'none' },   // Surveyor Odda: field greens, brass
   fenwick:    { tunic: 0x4a3e6e, trim: 0xe8d9a0, weapon: 'staff' },  // Archivist Fenwick: violet, parchment
+  // ---- the Verdant Hollow ----
+  bloomwarden:{ tunic: 0x2f5a2a, trim: 0xff5ea8, weapon: 'none', skin: 0x6e8a4a },  // the Hollow grew through a person
+  greta:      { tunic: 0x3a5a2e, trim: 0xff5ea8, weapon: 'none' },                   // Greta Thornby, botanist-in-exile
 };
 
 export function buildHumanoid(style) {
@@ -118,8 +121,9 @@ export function buildHumanoid(style) {
 export function buildBoar(elite = false, palette) {
   const g = new THREE.Group();
   const gold = palette === 'gold';
-  const hide = lambert(gold ? 0xc9a14a : elite ? 0x4a2c20 : 0x6e4a32);
-  const dark = lambert(gold ? 0x8a6a2a : 0x3a2418);
+  const verdant = palette === 'verdant';
+  const hide = lambert(verdant ? 0x4a6e3a : gold ? 0xc9a14a : elite ? 0x4a2c20 : 0x6e4a32);
+  const dark = lambert(verdant ? 0x2e4a24 : gold ? 0x8a6a2a : 0x3a2418);
 
   const body = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.62, 0.58), hide));
   body.position.y = 0.55;
@@ -133,7 +137,7 @@ export function buildBoar(elite = false, palette) {
   head.position.x = 0.2;
   const snout = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.22), dark);
   snout.position.set(0.5, -0.06, 0);
-  const tuskMat = lambert(gold ? 0xfff0c0 : 0xe8dcc0);
+  const tuskMat = lambert(verdant ? 0xff5ea8 : gold ? 0xfff0c0 : 0xe8dcc0);
   const tuskL = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.2, 4), tuskMat);
   tuskL.position.set(0.42, -0.1, 0.14);
   tuskL.rotation.z = 0.6;
@@ -162,8 +166,9 @@ export function buildBoar(elite = false, palette) {
 export function buildWolf(palette) {
   const g = new THREE.Group();
   const frost = palette === 'frost';
-  const fur = lambert(frost ? 0xdfe9f5 : 0x5e6470);
-  const dark = lambert(frost ? 0x9fb6c8 : 0x3a3e48);
+  const verdant = palette === 'verdant';
+  const fur = lambert(verdant ? 0x4a6e3a : frost ? 0xdfe9f5 : 0x5e6470);
+  const dark = lambert(verdant ? 0x2e4a24 : frost ? 0x9fb6c8 : 0x3a3e48);
 
   const body = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 0.42), fur));
   body.position.y = 0.62;
@@ -181,9 +186,9 @@ export function buildWolf(palette) {
   const earR = earL.clone();
   earR.position.z = -0.1;
   headPivot.add(head, muzzle, earL, earR);
-  if (frost) {
+  if (frost || verdant) {
     const eyeGeo = new THREE.BoxGeometry(0.06, 0.06, 0.05);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: frost ? 0x9fe8ff : 0xff5ea8 });
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
     eyeL.position.set(0.3, 0.04, 0.12);
     const eyeR = eyeL.clone();
@@ -210,6 +215,48 @@ export function buildWolf(palette) {
 
   g.userData.rig = { legs, headPivot };
   g.userData.height = 1.1;
+  return g;
+}
+
+// Sporeling — a walking glowcap-mushroom-person (ranged caster). Faces +X like
+// the other beasts (built on the beast rig contract: rig.legs[4] + headPivot, so
+// the non-humanoid dispatch handles facing and it could fall back to animateBeast).
+export function buildSporeling() {
+  const g = new THREE.Group();
+  const flesh = lambert(0x6e8a4a);
+  const dark = lambert(0x4a5e2e);
+
+  const body = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.6), flesh));
+  body.position.y = 0.5;
+  g.add(body);
+
+  // domed glowcap head on a forward (+X) pivot, with glowing under-gills
+  const headPivot = new THREE.Group();
+  headPivot.position.set(0.4, 0.7, 0);
+  const cap = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), lambert(0xff5ea8)));
+  cap.scale.y = 0.5;       // flatten into a dome
+  cap.position.y = 0.18;
+  const gills = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.46, 0.46, 0.06, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff8ed0 }),
+  );
+  gills.position.y = 0.05;
+  headPivot.add(cap, gills);
+  g.add(headPivot);
+
+  function leg(x, z) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, 0.34, z);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.34, 0.12), dark);
+    m.position.y = -0.16;
+    pivot.add(m);
+    g.add(pivot);
+    return pivot;
+  }
+  const legs = [leg(0.22, 0.16), leg(0.22, -0.16), leg(-0.22, 0.16), leg(-0.22, -0.16)];
+
+  g.userData.rig = { legs, headPivot };
+  g.userData.height = 1.4;
   return g;
 }
 
@@ -409,6 +456,40 @@ export function animateBeast(group, state, elapsed) {
   if (state.attackT >= 0) {
     const t = state.attackT;
     r.headPivot.rotation.x = t < 0.4 ? (t / 0.4) * 0.5 : 0.5 - ((t - 0.4) / 0.6) * 1.1;
+  }
+}
+
+export function animateSporeling(group, state, elapsed) {
+  const r = group.userData.rig;
+  if (!r || state.dead) return;   // rig assumed +X-facing (beast formula); guard corpse
+
+  if (state.moving) {
+    const ph = elapsed * 9 * (state.speed || 1);
+    r.legs[0].rotation.x = Math.sin(ph) * 0.6;
+    r.legs[1].rotation.x = Math.sin(ph + Math.PI) * 0.6;
+    r.legs[2].rotation.x = Math.sin(ph + Math.PI) * 0.6;
+    r.legs[3].rotation.x = Math.sin(ph) * 0.6;
+    r.headPivot.rotation.z = Math.sin(ph) * 0.1;          // waddle body tilt
+  } else {
+    r.legs.forEach((l) => (l.rotation.x = 0));
+    const breathe = 1 + Math.sin(elapsed * 1.5) * 0.06;   // cap "breathe"
+    r.headPivot.scale.set(breathe, breathe, breathe);
+    r.headPivot.rotation.z = 0;
+    r.headPivot.rotation.x = Math.sin(elapsed * 1.3) * 0.06;  // gentle sniff
+  }
+
+  // attack: head rears back then puffs the spore-cloud forward (+X lunge + spike)
+  if (state.attackT >= 0) {
+    const t = state.attackT;
+    const lunge = Math.sin(Math.min(t, 1) * Math.PI);     // 0 -> 1 -> 0
+    r.headPivot.position.x = 0.4 + lunge * 0.3;
+    const spike = 1 + lunge * 0.25;
+    r.headPivot.scale.set(spike, spike, spike);
+  } else if (!state.moving) {
+    r.headPivot.position.x = 0.4;
+  } else {
+    r.headPivot.position.x = 0.4;
+    r.headPivot.scale.set(1, 1, 1);
   }
 }
 

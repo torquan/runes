@@ -4,12 +4,13 @@ import { buildDungeon } from './dungeon.js';
 import { buildHighlands } from './highlands.js';
 import { buildFrostveil } from './frostveil.js';
 import { buildSanctum } from './sanctum.js';
+import { buildHollow } from './hollow.js';
 import { heightAt, HIGHLANDS } from './noise.js';
-import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
+import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, spawnHollowNpc, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
 import { createPlayer, updatePlayer, CLASSES } from './player.js';
 import { freshTalents, sanitizeTalents } from './talents.js';
 import { castSkill, updateCombat, clickTarget, tabTarget, useRune, createFx } from './combat.js';
-import { createQuests, createHighlandQuests, createFrostveilQuests, createSanctumQuests } from './quests.js';
+import { createQuests, createHighlandQuests, createFrostveilQuests, createSanctumQuests, createHollowQuests } from './quests.js';
 import { makeUnique, makeGenerated, rollUid } from './items.js';
 import { buildHumanoid } from './characters.js';
 import { createUi } from './ui.js';
@@ -38,10 +39,12 @@ const dungeon = buildDungeon(scene);
 const highlands = buildHighlands(scene);
 const frostveil = buildFrostveil(scene);
 const sanctum = buildSanctum(scene);
+const hollow = buildHollow(scene);
 const enemies = spawnEnemies(scene);
 const npc = spawnNpc(scene);
 const gateNpc = spawnGateNpc(scene);
 const { odda, fenwick } = spawnExpansionNpcs(scene);
+const { greta } = spawnHollowNpc(scene);
 // Hermit Madge — no chain, no marker; just a sock and three riddles
 const madge = {
   name: 'Hermit Madge',
@@ -50,11 +53,11 @@ const madge = {
 };
 madge.group.position.copy(world.madgePos);
 madge.group.rotation.y = 0.9;
-scene.add(npc.group, gateNpc.group, odda.group, fenwick.group, madge.group);
+scene.add(npc.group, gateNpc.group, odda.group, fenwick.group, greta.group, madge.group);
 
 const game = {
-  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, enemies,
-  npc, gateNpc, npcs: [npc, gateNpc, odda, fenwick, madge],
+  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, hollow, enemies,
+  npc, gateNpc, npcs: [npc, gateNpc, odda, fenwick, greta, madge],
   player: null,
   ui: createUi(),
   fx: createFx(scene),
@@ -62,6 +65,7 @@ const game = {
   highlandQuests: createHighlandQuests(),
   frostveilQuests: createFrostveilQuests(),
   sanctumQuests: createSanctumQuests(),
+  hollowQuests: createHollowQuests(),
   audio: sfx,
   input: { keys: new Set(), mouseForward: false },
   classes: CLASSES,
@@ -75,6 +79,7 @@ npc.chain = game.quests;
 gateNpc.chain = game.highlandQuests;
 odda.chain = game.frostveilQuests;
 fenwick.chain = game.sanctumQuests;
+greta.chain = game.hollowQuests;
 
 // --- zone atmosphere: golden meadow vs crypt gloom vs ashen highlands ---
 function setZone(zone) {
@@ -117,6 +122,16 @@ function setZone(zone) {
     world.hemi.color.set(0x9a96c8);
     world.sunLight.intensity = 0.1;
     world.sunLight.color.set(0xcfe8ff);
+  } else if (zone === 'hollow') {
+    scene.fog.color.set(0x18301c);     // dense, close, warm-green grotto haze
+    scene.fog.near = 12;
+    scene.fog.far = 95;
+    scene.background.set(0x05080a);    // olive→near-black dome, no sun disc
+    world.sky.visible = false;         // a low rock dome; the placed lights + emissive ground carry it
+    world.hemi.intensity = 0.3;
+    world.hemi.color.set(0x6fbf80);    // green-lit from below by the flora
+    world.sunLight.intensity = 0.08;   // no sun reaches the Hollow
+    world.sunLight.color.set(0xbfffd0);
   } else {
     scene.fog.color.set(0xc4d4e0);
     scene.fog.near = 60;
@@ -161,6 +176,7 @@ function allPortals() {
   const list = [...dungeon.portals];
   if (game.frostveil) list.push(...game.frostveil.portals);
   if (game.sanctum) list.push(...game.sanctum.portals);
+  if (game.hollow) list.push(...game.hollow.portals);
   return list;
 }
 
@@ -386,7 +402,7 @@ game.save = () => {
   if (!game.player || saveBlocked) return;
   const p = game.player;
   localStorage.setItem(SAVE_KEY, JSON.stringify({
-    v: 4,
+    v: 5,
     classId: p.classId, secondaryId: p.secondaryId,
     level: p.level, xp: p.xp, gold: p.gold,
     runes: p.runes, runeBonus: p.runeBonus,
@@ -403,6 +419,7 @@ game.save = () => {
     highlandQuests: game.highlandQuests.serialize(),
     frostveilQuests: game.frostveilQuests.serialize(),
     sanctumQuests: game.sanctumQuests.serialize(),
+    hollowQuests: game.hollowQuests.serialize(),
   }));
 };
 
@@ -411,7 +428,7 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    return s && [1, 2, 3, 4].includes(s.v) && CLASSES[s.classId] ? s : null;
+    return s && [1, 2, 3, 4, 5].includes(s.v) && CLASSES[s.classId] ? s : null;
   } catch { return null; }
 }
 
@@ -420,7 +437,7 @@ window.__veteran2 = (classId = 'warrior') => {
   if (!CLASSES[classId]) { console.warn('classes:', Object.keys(CLASSES).join(', ')); return; }
   const done = (id, n) => [id, { status: 'done', progress: n }];
   localStorage.setItem(SAVE_KEY, JSON.stringify({
-    v: 4, classId, secondaryId: null,
+    v: 5, classId, secondaryId: null,
     level: 90, xp: 0,
     gold: 250000, runes: 40, runeBonus: 30,
     potions: 25, trainDmg: 0, trainHp: 0, trainCrit: 0, boots: true,
@@ -437,7 +454,7 @@ window.__veteran2 = (classId = 'warrior') => {
     highlandQuests: { quests: Object.fromEntries([
       done('h_cinders', 6), done('h_packs', 8), done('h_emberlord', 1), done('h_pyraxis', 1),
     ]), bounty: { status: 'ready', progress: 0 } },
-    // frostveil/sanctum chains intentionally absent -> fresh expansion
+    // frostveil/sanctum/hollow chains intentionally absent -> fresh expansion
   }));
   location.reload();
 };
@@ -666,6 +683,7 @@ function startGame(classId, saved) {
     game.highlandQuests.load(saved.highlandQuests);   // no-ops on undefined (old saves)
     game.frostveilQuests.load(saved.frostveilQuests);
     game.sanctumQuests.load(saved.sanctumQuests);
+    game.hollowQuests.load(saved.hollowQuests);
     game.slain = new Set(saved.slain ?? []);
     if (p.secrets.vault) dungeon.openChest();         // the hoard stays plundered
   }
@@ -714,6 +732,7 @@ function tick() {
     highlands.update(elapsed);
     frostveil.update(elapsed, game);
     sanctum.update(elapsed);
+    hollow.update(elapsed, game);
 
     let npcDist = Infinity;
     for (const n of game.npcs) npcDist = Math.min(npcDist, updateNpc(n, game, elapsed));
@@ -722,6 +741,8 @@ function tick() {
     const nearSign = p.distanceTo(highlands.signPos) < 6 && p.x < HIGHLANDS.GATE_X;
     const frostSign = game.player.alive &&
       frostveil.signs.find((s) => Math.hypot(p.x - s.x, p.z - s.z) < 6);
+    const hollowSign = game.player.alive &&
+      hollow.signs.find((s) => Math.hypot(p.x - s.x, p.z - s.z) < 6);
     const nearPond = game.zone === 'world' && p.distanceTo(world.pondPos) < 4.5;
     const nearChest = game.zone === 'crypt' && !game.player.secrets.vault &&
       Math.hypot(p.x - dungeon.chestPos.x, p.z - dungeon.chestPos.z) < 4;
@@ -736,6 +757,8 @@ function tick() {
       game.ui.setInteractPrompt(true, 'The Ashen Highlands — recommended level 55+');
     } else if (frostSign && !game.ui.dialogOpen()) {
       game.ui.setInteractPrompt(true, frostSign.label);
+    } else if (hollowSign && !game.ui.dialogOpen()) {
+      game.ui.setInteractPrompt(true, hollowSign.label);
     } else if (portal && game.player.alive) {
       game.ui.setInteractPrompt(true, portal.label);
     } else {
@@ -757,6 +780,10 @@ function tick() {
     if (!game._fissureWoke && game.slain.has('hrimnir')) {
       game._fissureWoke = true;
       game.ui.log('Beneath the tarn, gold light wakes. The fissure is breathing.', 'log-quest');
+    }
+    if (!game._hollowWoke && (game.slain.has('noctyra') || game.player.level >= 102)) {
+      game._hollowWoke = true;
+      game.ui.log('Where the Hollow Star fell, the Sanctum floor has cracked — green light, and the smell of something growing back.', 'log-quest');
     }
     if (!game._hintVault && game.zone === 'crypt' &&
         Math.hypot(p.x - dungeon.thronePos.x, p.z - dungeon.thronePos.z) < 4) {
@@ -817,6 +844,7 @@ function tick() {
     highlands.update(elapsed);
     frostveil.update(elapsed, null);
     sanctum.update(elapsed);
+    hollow.update(elapsed, null);
     const fakeGame = { player: { group: { position: camera.position } } };
     for (const n of game.npcs) updateNpc(n, fakeGame, elapsed);
   }

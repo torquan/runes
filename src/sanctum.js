@@ -166,6 +166,15 @@ export function buildSanctum(scene) {
   swirlOut.position.set(0, F + 1.9, 260);
   group.add(swirlOut);
 
+  // descent swirl deep in the final hall by the Star Cradle dais — the grotto
+  // opened beneath where Noctyra fell. Green-tinted to read as the Hollow below.
+  const descentMat = new THREE.MeshBasicMaterial({
+    color: 0x6fffb0, transparent: true, opacity: 0.6, side: THREE.DoubleSide,
+  });
+  const swirlDown = new THREE.Mesh(new THREE.CircleGeometry(1.3, 24), descentMat);
+  swirlDown.position.set(0, F + 1.9, 348);   // in front of the dais (z 346), back wall z 349
+  group.add(swirlDown);
+
   scene.add(group);
 
   return {
@@ -176,6 +185,12 @@ export function buildSanctum(scene) {
         dest: { x: -302, z: 5, zone: 'frostveil' },
         arriveMsg: 'Snow. Stars. Air that moves. You had missed all three.',
       },
+      {
+        x: 0, z: 350, label: 'Descend into the Verdant Hollow',
+        dest: { x: 0, z: -258, zone: 'hollow' },
+        gate: (g) => g.slain.has('noctyra') || g.player.level >= 102,
+        arriveMsg: 'The floor is breathing. Green light, wet warmth, and the smell of a thousand springs at once. Something down here did not get the message that the world ended.',
+      },
     ],
     update(elapsed) {
       // pulse the star-shards
@@ -184,6 +199,9 @@ export function buildSanctum(scene) {
       // exit swirl shimmer
       swirlOut.material.opacity = 0.55 + Math.sin(elapsed * 2.4) * 0.18;
       swirlOut.rotation.z = elapsed * 0.8;
+      // descent swirl shimmer (the green pull of the Hollow below)
+      swirlDown.material.opacity = 0.5 + Math.sin(elapsed * 2.1 + 1) * 0.18;
+      swirlDown.rotation.z = -elapsed * 0.7;
       // rotate the orrery, each ring at its own lazy pace
       orrery.rotation.y = elapsed * 0.15;
       rings.forEach((r, i) => { r.rotation.z = elapsed * (0.2 + i * 0.12); });

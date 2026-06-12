@@ -1,6 +1,8 @@
 // Quest chain in the classic style: boars, wolves, a boss — then bandits, their
 // king, and finally an endless bounty board for the long evenings.
 
+import { makeUnique } from './items.js';   // for quests that hand over a named unique (Greta's coda)
+
 const QUESTS = [
   {
     id: 'boars',
@@ -130,6 +132,9 @@ const HIGHLAND_KINDS = new Set(['cinderwraith', 'ashhound', 'obsidiangolem', 'em
 // the Frostveil and the Starfall Sanctum families — same zone-gated bounty trick
 const FROSTVEIL_KINDS = new Set(['hoarfrostserpent', 'frostfangstalker', 'rimeboundsentinel', 'hrimnir']);
 const SANCTUM_KINDS = new Set(['custodian', 'seraphel', 'noctyra']);
+// the Verdant Hollow family — five culls (NOT Vorthal; the world boss is no
+// bounty fodder). Greta's standing order counts these; Barnaby's never does.
+const HOLLOW_KINDS = new Set(['sporecaller', 'hollowstalker', 'bloomwarden', 'swarmling', 'spireshade']);
 
 export function createQuests() {
   return makeChain({
@@ -138,7 +143,8 @@ export function createQuests() {
     // Barnaby's bounty counts anything EXCEPT the gated zones' creatures
     // (thunderbristle is in no set, so it still counts for Barnaby — as intended)
     bountyCounts: (enemy) =>
-      !HIGHLAND_KINDS.has(enemy.kind) && !FROSTVEIL_KINDS.has(enemy.kind) && !SANCTUM_KINDS.has(enemy.kind),
+      !HIGHLAND_KINDS.has(enemy.kind) && !FROSTVEIL_KINDS.has(enemy.kind) &&
+      !SANCTUM_KINDS.has(enemy.kind) && !HOLLOW_KINDS.has(enemy.kind),
     vendor: true,    // Barnaby sells wares + buys loot
   });
 }
@@ -229,6 +235,65 @@ export function createSanctumQuests() {
     npcName: 'Archivist Fenwick',
     bountyCounts: (enemy) => SANCTUM_KINDS.has(enemy.kind),
     vendor: false,   // Fenwick narrates, he does not sell
+  });
+}
+
+// ===== The Verdant Hollow — Greta Thornby's chain (post-Noctyra, L106–118) =====
+// A disgraced royal botanist, laughed out of the academy for insisting the Hollow
+// Star's death would make things GROW. She is right, vindicated, and furious about
+// it — gleeful and bitter in equal measure, taking notes while the flora tries to
+// eat her. Four culls (one per trash family), the spore-queen Spireshade, a proof-
+// run, the world-root Vorthal, then a coda for her paper. Her own zone-gated bounty.
+// The coda hands over a named unique (Greta's Pressed Bloom) via rewardItem.
+const HOLLOW_QUESTS = [
+  { id: 'h_swarm', name: 'It Spreads', targetKind: 'swarmling', count: 8, trial: false,
+    intro: `You came DOWN here? On purpose? Then you're either a hero or a colleague, and the academy assures me those are different. Greta Thornby — botanist, exile, and the only living woman who PREDICTED this. They laughed me out of the lecture hall for a paper titled "On the Fertility of Catastrophe." Well. Read the room, gentlemen. The Mycelial Swarmlings are eating my sample plots faster than I can label them. Cull eight so I can finish a sentence in my field journal.`,
+    outro: `Eight! And my plots survive another hour. Do you know what this place IS, hero? It's the world apologizing for the last hundred years, all at once, with no sense of restraint. Keep that blade out. The apology gets bigger.`,
+    rewardXp: 7200, rewardGold: 9000 },
+  { id: 'h_stalkers', name: 'Green on Green', targetKind: 'hollowstalker', count: 8, trial: false,
+    intro: `New variable. The Hollowstalkers — wolves the moss took back. You won't see them; the whole vale is the exact color they are. You'll HEAR them, once, the way you hear a door close in a house you thought was empty. Eight, please, before they reclassify ME as a sample plot. Note for the journal: predators adapt to bioluminescence within a generation. The academy can read it on my headstone.`,
+    outro: `Eight green ghosts, grounded. The journal grows; my pension does not. Spite is a renewable resource, hero — I have plenty for both of us.`,
+    rewardXp: 7800, rewardGold: 9600 },
+  { id: 'h_callers', name: 'A Cloud of Witnesses', targetKind: 'sporecaller', count: 6, trial: false,
+    intro: `Now the truly maddening ones. The Sporecallers stand at the back and SPIT — clouds of glowing spore that find you across the whole grotto. Close the distance or eat the cloud; there's no third option, I checked, twice, painfully. Six down. And if you cough magenta for a week, that's normal. Probably. I'd cite the source but the source is "I tried it."`,
+    outro: `Six callers silenced and the air almost breathable. I'm cataloguing a new genus per hour down here, hero. The academy will have to invent a longer Latin just to apologize.`,
+    rewardXp: 8400, rewardGold: 10500 },
+  { id: 'h_wardens', name: 'They Were People', targetKind: 'bloomwarden', count: 5, trial: false,
+    intro: `…The Bloomwardens I will not enjoy. Look closely — under the bark and the flowers, that's a person the Hollow grew THROUGH. The old vale-keepers, rooted where they stood, made into trellises. Steel skips off the bark, so don't fence — break them. Five. It's a mercy, hero, though it won't feel like one. Bring me a flower from each. For the record. For them.`,
+    outro: `Five freed — if "freed" is the word. I pressed each flower in the journal. Someone should remember they were people before they were scenery. Thank you for breaking them gently. Or at all.`,
+    rewardXp: 9000, rewardGold: 11500 },
+  { id: 'h_spireshade', name: 'The Mother of It All', targetKind: 'spireshade', count: 1, trial: true,
+    intro: `Everything down here feeds ONE thing, and it sits in the great glowing pool: SPIRESHADE, the Mother-Bloom — the spore-queen the whole vale answers to. She erupts blooms straight up beneath your feet: MOVE the instant the ground glows. And when she bleeds she calls the green ghosts, so cut the wolves first. I have studied her from a sensible distance and concluded the sensible distance is "another vale." Go anyway. I'll be at the rim, taking the most important notes of my career.`,
+    outro: `Spireshade — DECEASED, and the pool gone quiet for the first time since I arrived. Hero, the pool is draining. There's a deeper hollow under it, and something down there is BIGGER than her, and older, and it just noticed the quiet. Take these runes. Stand a little further from me.`,
+    rewardXp: 18000, rewardGold: 22000, rewardRunes: 14 },
+  { id: 'h_proof', name: 'For the Appendix', targetKind: 'sporecaller', count: 10, trial: false,
+    intro: `Before you go down there and die magnificently — I need PROOF, hero. The academy will say I salted my own samples; they always do. Ten more Sporecallers, dropped where I can map exactly where they fell. Distribution data. It's the difference between a vindication and a vendetta, and I would honestly settle for either.`,
+    outro: `Ten, perfectly plotted. The pattern is undeniable — the Hollow grows in a SPIRAL, hero, outward from the deepest point, like something exhaling. And at the center of the spiral is the thing the pool was hiding. Of course it is. The center of everything always is.`,
+    rewardXp: 9600, rewardGold: 12000 },
+  { id: 'h_vorthal', name: 'The First Root', targetKind: 'vorthal', count: 1, trial: true,
+    intro: `So. The center of the spiral. VORTHAL, THE FIRST ROOT — the seed the Hollow Star's death cracked open, and everything green and wrong up here is just its leaves. It is the size of the cavern, hero, and it does not so much fight as GARDEN. Write these on your arm: it heaves the whole floor — JUMP. It lashes roots at your feet — MOVE. And it sows rot that stays and EATS the ground — move, and never set foot back in it; the vale will shrink until you've nowhere left to stand. It calls the green hunt; cut them quick. This is the deepest root in Taborea, hero. Pull it.`,
+    outro: `…It's quiet. Truly quiet — the spores have stopped rising. Vorthal, the First Root, UPROOTED. Hero, the academy can keep its lecture halls; I have the only field journal that will ever matter, and you are every dangerous page of it. The Hollow will grow back — it always does, that's the whole horrible point — but slower now. Gentler. Take these runes. You've earned a season of quiet, and Taborea has earned a spring.`,
+    rewardXp: 38000, rewardGold: 52000, rewardRunes: 30 },
+  { id: 'h_coda', name: 'On the Fertility of Catastrophe', targetKind: 'bloomwarden', count: 6, trial: false,
+    intro: `One last favor, and it's selfish. My paper needs a CONCLUSION. Six more Bloomwardens, the last of the rooted folk, laid to rest — so the final chapter reads "and then they were at peace," and not "and then I ran out of pages." Help me end it properly, hero. Everything down here deserves a proper ending. Even the academy. Especially the academy.`,
+    outro: `Done. The journal closes. "On the Fertility of Catastrophe," by Greta Thornby — vindicated, retired, and the only botanist alive who gardened in hell and lived. Go on, hero. The world's growing back. Go grow with it.`,
+    rewardXp: 11000, rewardGold: 14000, rewardItem: 'greta_pressed' },
+];
+
+const HOLLOW_BOUNTY = {
+  name: "Botanist's Standing Order", count: 12,
+  intro: `The Hollow re-seeds itself nightly — I have the spore-counts to prove it, and no one to prove them TO. A standing order, then: any twelve of the vale's creatures, and I'll pay from the grant the academy doesn't know I still draw. For science, hero. For SPITE.`,
+  outro: `Twelve culled, twelve catalogued. The vale exhales and fills back in. The order stands — appallingly.`,
+};
+function hwBountyXp(game) { return Math.max(11000, game.player.level * 100); }
+function hwBountyGold(game) { return Math.max(11000, game.player.level * 100); }
+
+export function createHollowQuests() {
+  return makeChain({
+    quests: HOLLOW_QUESTS, bounty: HOLLOW_BOUNTY, bountyXp: hwBountyXp, bountyGold: hwBountyGold,
+    npcName: 'Greta Thornby',
+    bountyCounts: (enemy) => HOLLOW_KINDS.has(enemy.kind),
+    vendor: false,   // Greta gardens in hell, she does not sell
   });
 }
 
@@ -372,6 +437,14 @@ function makeChain(cfg) {
                   game.player.runes += q.rewardRunes;
                   ui.log(`Received ${q.rewardRunes} glowing runes!`, 'log-loot');
                 }
+                // some quests hand over a named unique (e.g. Greta's coda)
+                if (q.rewardItem) {
+                  const it = makeUnique(q.rewardItem);
+                  if (it) {
+                    game.player.addItem(game, it);
+                    ui.log(`Received ${it.name}!`, 'log-loot');
+                  }
+                }
                 game.audio.quest();
                 ui.log(`Quest complete: ${q.name}!`, 'log-quest');
                 ui.refreshQuestTracker(this);
@@ -484,6 +557,9 @@ function targetName(kind) {
     rimeboundsentinel: 'Rimebound Sentinel', hrimnir: 'Hrimnir, the Avalanche-Jarl',
     custodian: 'Astral Custodian', seraphel: 'Seraphel, the Vault Warden',
     noctyra: 'Noctyra, the Hollow Star', thunderbristle: 'Thunderbristle, Sire of All Boars',
+    sporecaller: 'Sporecaller', hollowstalker: 'Hollowstalker', bloomwarden: 'Bloomwarden',
+    swarmling: 'Mycelial Swarmling', spireshade: 'Spireshade, the Mother-Bloom',
+    vorthal: 'Vorthal, the First Root',
   }[kind] || kind;
 }
 
