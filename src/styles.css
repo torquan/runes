@@ -537,6 +537,9 @@ body {
 /* sell mode: price tag on every item + gold hover so a sale never reads as an equip */
 .inv-price { position: absolute; bottom: 1px; right: 3px; font-family: 'Cinzel', serif;
   font-size: 10px; font-weight: 700; color: var(--gold-text); text-shadow: 0 1px 2px #000; pointer-events: none; }
+/* stack-count badge for materials / elixirs in the bag */
+.inv-qty { position: absolute; bottom: 1px; right: 3px; font-family: 'Cinzel', serif;
+  font-size: 11px; font-weight: 700; color: var(--parchment); text-shadow: 0 1px 2px #000; pointer-events: none; }
 #inv-grid.selling .inv-cell:hover { border-color: var(--gold-text); box-shadow: 0 0 10px rgba(255,215,110,.55); }
 #inv-grid { display: grid; grid-template-columns: repeat(6, 52px); gap: 7px; margin-bottom: 10px; }
 #inv-stats-summary { text-align: center; color: var(--gold-text); font-size: 12px; margin-bottom: 8px; }
@@ -558,6 +561,13 @@ body {
 .stat-up { color: #5edb6a; } .stat-down { color: #ff6b6b; }
 .tip-flavor { margin-top: 6px; font-style: italic; opacity: .75; }
 .tip-value { margin-top: 4px; color: var(--gold-text); }
+/* set-piece block (tooltip) */
+.tip-set { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(232,200,122,.25); }
+.tip-set b { color: var(--gold-text); }
+.tip-set-piece { font-size: 11px; color: #7a6a4a; padding-left: 8px; }
+.tip-set-piece.owned { color: #5edb6a; }
+.tip-set-bonus { font-size: 11px; color: #7a6a4a; margin-top: 2px; }
+.tip-set-bonus.on { color: #9ecfdd; }
 
 /* rarity-colored loot log lines + floating text */
 .log-loot-common{color:#cfd3d6}.log-loot-uncommon{color:#5edb6a}.log-loot-rare{color:#6fb6ff}
@@ -622,6 +632,38 @@ body {
 
 /* capstone action-bar slot tint */
 .skill-slot.capstone { border-color: var(--bronze-hi); box-shadow: inset 0 0 0 1px #000, 0 0 10px rgba(255,215,110,.35); }
+
+/* ---------- crafting bench (Smith Halla; mirrors shop/char modals) ---------- */
+#craft-panel { position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(8,5,2,.45); backdrop-filter: blur(2px); z-index: 35; }
+.craft-frame { width: 520px; max-height: 88vh; overflow-y: auto; }
+/* owned-material strip */
+#craft-mats { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  padding: 8px; margin-bottom: 12px; background: rgba(0,0,0,.3);
+  border: 1px solid rgba(232,200,122,.22); border-radius: 6px; }
+.craft-have { display: flex; align-items: center; gap: 4px; font-size: .82rem; color: #cfc2a0; }
+.craft-have .ch-icon { font-size: 1.1rem; }
+.craft-have .ch-qty { font-family: 'Cinzel', serif; font-weight: 700; color: var(--parchment); }
+.craft-have.zero { opacity: .4; }
+/* recipe rows */
+#craft-rows { display: flex; flex-direction: column; gap: 8px; }
+.craft-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px;
+  background: rgba(0,0,0,.35); border: 1px solid rgba(232,200,122,.22); border-radius: 6px; }
+.craft-icon { font-size: 1.5rem; color: var(--bronze-hi); text-shadow: 0 0 10px rgba(232,200,122,.6);
+  width: 32px; text-align: center; }
+.craft-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.craft-info b { font-family: 'Cinzel', serif; font-size: 0.82rem; color: #ffe9b0; }
+.craft-info .craft-desc { font-size: 0.72rem; color: #cfc2a0; font-style: italic; }
+.craft-cost { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.74rem; }
+.craft-mat { color: #5edb6a; white-space: nowrap; }      /* affordable material count (green) */
+.craft-mat.short { color: #ff6b6b; }                      /* short on this material (red) */
+.craft-gold { color: var(--gold-text); }
+.craft-gold.short { color: #ff6b6b; }
+.craft-btn { padding: 6px 14px; font-size: 0.74rem; white-space: nowrap; }
+.craft-btn:disabled { filter: grayscale(.7) brightness(.6); cursor: default; }
+/* slot / item / drink pickers (inline under a row) */
+.craft-picker { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px 0; }
+.craft-picker .btn-mini { padding: 3px 12px; }
 
 /* ---------- talents v2: rank bars, choice nodes, the Mastery Oath ---------- */
 .talent-rankbar { position: relative; height: 11px; background: #140d06; border: 1px solid var(--bronze-lo);

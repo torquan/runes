@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { heightAt, ZONE_BOUNDS } from './noise.js';
-import { aggroEnemy, killEnemy } from './entities.js';
+import { aggroEnemy, killEnemy, cancelTelegraphsFor } from './entities.js';
 import { rollDrops, rarityColor } from './items.js';
 import { gcdValue, healRecvMult, choiceIs, critDmgBonus, autoInterval,
          stoneformReduction, BLOODSCENT_MULT, SPREE_MULT, AVENGER_MULT,
@@ -202,6 +202,7 @@ function rollDamage(player, mult) {
   let m = mult;
   if (player.spreeT > 0) m *= SPREE_MULT;       // Killing Spree window
   if (player.avengerT > 0) m *= AVENGER_MULT;   // Avenger's Pact window
+  if (player.elixirT > 0 && player.elixirEffect.stat === 'dmgPct') m *= (1 + player.elixirEffect.amount);  // Elixir of Fury
   const base = player.baseDamage() * m;
   const variance = 0.9 + Math.random() * 0.2;
   const crit = Math.random() < player.critChance();
@@ -259,6 +260,43 @@ function verdictReset(game, skill) {
 
 const v1 = new THREE.Vector3();
 
+// ---------- crowd control (the level-55 class skills) ----------
+// Apply a skill's CC riders to an enemy AFTER its damage lands. Bosses/elites
+// carry type.ccImmune: stun/root/snare collapse to a flat 0.5s stagger (no
+// perma-lock, no stat wall) while interrupt + silence ALWAYS apply — interrupt
+// is the whole point against a casting boss. NO damage-reduction is granted here.
+// NOTE: all four new skills are cast:0 single-beat, so CC is applied at CAST
+// time on the current target (not on projectile landing) — a ~0.2s difference
+// that avoids threading rider state through the projectile system.
+function applyCC(game, e, skill) {
+  if (!e.alive) return;
+  const immune = e.type.ccImmune;
+  if (skill.interrupt) {
+    e.mechTimer = Math.max(e.mechTimer, 0.5);
+    cancelTelegraphsFor(game, e);                       // owned by entities.js — never re-walk telegraphs[] here
+    game.ui.floatText(e.group.position, 'Interrupted!', '');
+  }
+  if (skill.silence) {
+    e.silenceT = Math.max(e.silenceT, skill.silence);
+    game.ui.floatText(e.group.position, 'Silenced!', '');
+  }
+  if (immune) {
+    if (skill.stun || skill.root) e.ccT = Math.max(e.ccT, 0.5);   // hard cap: 0.5s stagger
+    if (skill.stun || skill.root || skill.snare) game.ui.floatText(e.group.position, 'Staggered!', '');
+  } else {
+    if (skill.stun) { e.ccT = Math.max(e.ccT, skill.stun); game.ui.floatText(e.group.position, 'Stunned!', ''); }
+    if (skill.root) { e.ccT = Math.max(e.ccT, skill.root); e.rooted = true; game.ui.floatText(e.group.position, 'Rooted!', ''); }
+    if (skill.snare) { e.snareT = skill.snareDur; e.snareAmt = skill.snare; game.ui.floatText(e.group.position, 'Snared!', ''); }
+  }
+  game.audio.ccThud();                                   // the new CC sfx (gather defines it in audio.js)
+  game.fx.burst(e.group.position, new THREE.Color(skill.color).getHex(), 12);
+}
+
+// does a skill carry any CC rider worth resolving?
+function hasCC(skill) {
+  return !!(skill.stun || skill.root || skill.snare || skill.silence || skill.interrupt);
+}
+
 // ---------- skills ----------
 export function castSkill(game, index) {
   const p = game.player;
@@ -304,7 +342,8 @@ function resolveSkill(game, skill) {
   game.ui.pulseSlot(p.barSkills().indexOf(skill));
 
   if (skill.kind === 'heal') {
-    const amount = Math.round(p.maxHp * skill.healPct * (1 + p.gearStat('healPower')) * healRecvMult(p.talents));
+    const elix = 1 + ((p.elixirT > 0 && p.elixirEffect.stat === 'healPct') ? p.elixirEffect.amount : 0);
+    const amount = Math.round(p.maxHp * skill.healPct * (1 + p.gearStat('healPower')) * healRecvMult(p.talents) * elix);
     p.hp = Math.min(p.maxHp, p.hp + amount);
     game.ui.floatText(p.group.position, `+${amount}`, 'heal');
     game.ui.log(`${skill.name} restores ${amount} health.`, 'log-heal');
@@ -385,6 +424,9 @@ function resolveSkill(game, skill) {
       applyDamage(game, t, dmg, crit, skill.name);
       if (skill.selfHealPct) selfHeal(game, Math.round(dmg * skill.selfHealPct));
     }
+    // CC riders fire at cast time on the current target (works for ranged too —
+    // these skills are instant; the projectile's ~0.2s flight is cosmetic here)
+    if (hasCC(skill) && t.alive) applyCC(game, t, skill);
     return;
   }
 
@@ -400,6 +442,7 @@ function resolveSkill(game, skill) {
       if (e.group.position.distanceTo(center) <= skill.aoeRadius + reachOf(e)) {
         const { dmg, crit } = rollDamage(p, skill.mult);
         applyDamage(game, e, dmg, crit, skill.name);
+        if (hasCC(skill) && e.alive) applyCC(game, e, skill);   // Frost Nova roots/interrupts each enemy hit
         hits++;
       }
     }
@@ -409,7 +452,8 @@ function resolveSkill(game, skill) {
 
 function selfHeal(game, amount) {
   const p = game.player;
-  const healed = Math.round(amount * healRecvMult(p.talents));   // Bulwark Mending applies to lifesteal too
+  const elix = 1 + ((p.elixirT > 0 && p.elixirEffect.stat === 'healPct') ? p.elixirEffect.amount : 0);
+  const healed = Math.round(amount * healRecvMult(p.talents) * elix);   // Bulwark Mending + Bloom elixir apply to lifesteal too
   p.hp = Math.min(p.maxHp, p.hp + healed);
   game.ui.floatText(p.group.position, `+${healed}`, 'heal');
 }

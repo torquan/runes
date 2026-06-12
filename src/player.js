@@ -20,6 +20,7 @@ export const CLASSES = {
       { id: 'enraged', name: 'Enraged Blow', icon: '✸', color: '#ffb05a', kind: 'damage', mult: 2.3, range: 3.2, mana: 12, cd: 6, cast: 0, desc: 'Channel your fury into a devastating blow.' },
       { id: 'whirl', name: 'Whirlwind', icon: '❂', color: '#ffd76e', kind: 'aoe', aoeCenter: 'self', aoeRadius: 6, mult: 1.5, range: 6, mana: 20, cd: 10, cast: 0, desc: 'Spin with blades out, striking all nearby foes.' },
       { id: 'secondwind', name: 'Second Wind', icon: '⛨', color: '#9dff8a', kind: 'heal', healPct: 0.32, mana: 15, cd: 15, cast: 0, desc: 'Grit your teeth and recover 32% of your health.' },
+      { id: 'bash', name: 'Shield Bash', icon: '🛡', color: '#ffd76e', kind: 'damage', mult: 1.6, range: 3.4, mana: 18, cd: 14, cast: 0, minLevel: 55, stun: 1.5, interrupt: true, desc: 'Slam your guard into a foe: solid damage, a 1.5s stun, and it cuts a cast short.' },
     ],
   },
   scout: {
@@ -30,6 +31,7 @@ export const CLASSES = {
       { id: 'vamp', name: 'Vampire Arrow', icon: '❥', color: '#ff6b8a', kind: 'damage', mult: 2.0, selfHealPct: 0.5, range: 24, mana: 14, cd: 6, cast: 0, desc: 'A cursed arrow that returns half its damage as life.' },
       { id: 'rain', name: 'Arrow Rain', icon: '⁂', color: '#bfff8a', kind: 'aoe', aoeCenter: 'target', aoeRadius: 5, mult: 1.45, range: 24, mana: 22, cd: 10, cast: 0, desc: 'Darken the sky over your target.' },
       { id: 'instinct', name: 'Survival Instinct', icon: '✚', color: '#9dff8a', kind: 'heal', healPct: 0.3, mana: 15, cd: 15, cast: 0, desc: 'Field-dress your wounds, restoring 30% health.' },
+      { id: 'hamstring', name: 'Hamstring Shot', icon: '➴', color: '#8aff9d', kind: 'damage', mult: 1.5, range: 24, mana: 20, cd: 14, cast: 0, minLevel: 55, snare: 0.5, snareDur: 3, interrupt: true, desc: 'An arrow through the leg: damage, a 50% slow for 3s, and it spoils a spell.' },
     ],
   },
   mage: {
@@ -40,6 +42,7 @@ export const CLASSES = {
       { id: 'fireball', name: 'Fireball', icon: '☀', color: '#ff9a30', kind: 'damage', mult: 2.8, range: 18, mana: 18, cd: 5, cast: 1.4, desc: 'Slow to conjure. Unforgettable on arrival.' },
       { id: 'storm', name: 'Thunderstorm', icon: 'ϟ', color: '#ffe96e', kind: 'aoe', aoeCenter: 'target', aoeRadius: 5.5, mult: 1.55, range: 18, mana: 26, cd: 10, cast: 0, desc: 'Call lightning down around your target.' },
       { id: 'tap', name: 'Essence Tap', icon: '◈', color: '#b08aff', kind: 'mana', manaPct: 0.45, mana: 0, cd: 12, cast: 0, desc: 'Draw 45% of your mana back from the weave.' },
+      { id: 'frostnova', name: 'Frost Nova', icon: '❄', color: '#aad9ff', kind: 'aoe', aoeCenter: 'self', aoeRadius: 6, mult: 1.4, range: 6, mana: 30, cd: 16, cast: 0, minLevel: 55, root: 2, interrupt: true, desc: 'A ring of ice: damage to all nearby, roots them for 2s, and interrupts their casts.' },
     ],
   },
   priest: {
@@ -50,6 +53,7 @@ export const CLASSES = {
       { id: 'brand', name: 'Soul Brand', icon: '✴', color: '#ffe08a', kind: 'damage', mult: 1.9, range: 15, mana: 14, cd: 6, cast: 0, desc: 'Sear the spirit within.' },
       { id: 'burst', name: 'Tidal Burst', icon: '❉', color: '#6fb6ff', kind: 'aoe', aoeCenter: 'target', aoeRadius: 5, mult: 1.35, range: 15, mana: 24, cd: 10, cast: 0, desc: 'The sea answers in anger.' },
       { id: 'regen', name: 'Regenerate', icon: '✚', color: '#9dff8a', kind: 'heal', healPct: 0.45, mana: 20, cd: 10, cast: 0, desc: 'Holy waters mend 45% of your health.' },
+      { id: 'stillness', name: 'Word of Stillness', icon: '✋', color: '#ffe08a', kind: 'damage', mult: 1.3, range: 15, mana: 22, cd: 18, cast: 0, minLevel: 55, silence: 2.5, interrupt: true, desc: 'Speak the old quiet: light damage, but the target cannot cast for 2.5s — and any spell breaks.' },
     ],
   },
 };
@@ -180,6 +184,8 @@ export function createPlayer(classId, scene) {
     slipstreamT: 0,  // post-dash speed window
     skystepT: 0,     // Skystep landing speed window
     undyingCd: 0,    // Undying Will internal cooldown
+    elixirT: 0,      // crafted-elixir buff window (transient, never saved)
+    elixirEffect: null, // { stat, amount } of the active elixir, or null when idle
     combatTimer: 0, // >0 means "in combat"
     cam: { yaw: 0, pitch: 0.42, dist: 10 },
 
@@ -191,7 +197,10 @@ export function createPlayer(classId, scene) {
     },
 
     allSkills() {
-      return this.secondary ? [...this.cls.skills, ...this.secondary.skills] : this.cls.skills;
+      // minLevel gates the level-55 control skills (and a dual-class's second one):
+      // they appear retroactively the moment level≥55 — no learn-state to persist.
+      const all = this.secondary ? [...this.cls.skills, ...this.secondary.skills] : this.cls.skills;
+      return all.filter((s) => !s.minLevel || this.level >= s.minLevel);
     },
 
     // equipped-gear contribution for one axis (dmg/hp/crit/speed/healPower)
@@ -217,7 +226,8 @@ export function createPlayer(classId, scene) {
     },
 
     critChance() {
-      return 0.12 + this.trainCrit * 0.03 + this.gearStat('crit') + critAdd(this.talents);
+      return 0.12 + this.trainCrit * 0.03 + this.gearStat('crit') + critAdd(this.talents)
+        + ((this.elixirT > 0 && this.elixirEffect.stat === 'crit') ? this.elixirEffect.amount : 0);
     },
 
     recalcStats() {
@@ -249,8 +259,9 @@ export function createPlayer(classId, scene) {
       this.potionCd = Math.max(2, 12 - potionCdReduction(this.talents));
       const potMul = potionMult(this.talents);            // Pathfinder Alchemy
       const healRecv = healRecvMult(this.talents);        // Bulwark Mending
+      const elixHeal = 1 + ((this.elixirT > 0 && this.elixirEffect.stat === 'healPct') ? this.elixirEffect.amount : 0);
       const hpw = 1 + this.gearStat('healPower');
-      const hp = Math.round(this.maxHp * 0.35 * hpw * potMul * healRecv);
+      const hp = Math.round(this.maxHp * 0.35 * hpw * potMul * healRecv * elixHeal);
       const mp = Math.round(this.maxMp * 0.25 * potMul);  // mana gets Alchemy, not heal-received
       this.hp = Math.min(this.maxHp, this.hp + hp);
       this.mp = Math.min(this.maxMp, this.mp + mp);
@@ -261,8 +272,27 @@ export function createPlayer(classId, scene) {
       game.save?.();
     },
 
+    // drink a crafted elixir: consume one, arm the transient buff window. The
+    // integrator's craft-panel elixir picker calls this. Effects are throughput/
+    // sustain/utility only (speed/dmgPct/crit/manaRegen/healPct) — never DR.
+    drinkElixir(game, item) {
+      const idx = this.inventory.indexOf(item);
+      if (idx < 0) return;
+      if (item.qty && item.qty > 1) item.qty -= 1;
+      else this.inventory.splice(idx, 1);
+      this.elixirT = item.effect.dur;
+      this.elixirEffect = { stat: item.effect.stat, amount: item.effect.amount };
+      game.audio.heal();
+      game.ui.log(`You drink ${item.name}.`, 'log-heal');
+      game.ui.floatText(this.group.position, item.name, 'heal');
+      game.save?.();
+    },
+
     // ---------- inventory & gear ----------
     equip(game, item) {
+      // reject non-gear: the bag UI may call equip on any clicked cell, but
+      // materials / elixirs / maps have no slot and must never be "worn"
+      if (item.kind === 'material' || item.kind === 'elixir' || item.kind === 'map') return;
       // move item from bag into its slot; old equipped item returns to bag
       const slot = item.slot;
       const idx = this.inventory.indexOf(item);
@@ -297,7 +327,13 @@ export function createPlayer(classId, scene) {
       game.ui.log(`Sold ${item.name} for ${item.value} gold.`, 'log-loot');
       game.save?.();
     },
-    addItem(game, item) {                        // called by combat on drop
+    addItem(game, item) {                        // called by combat on drop (and gather)
+      // materials stack by matId: merge onto an existing stack (no new slot, no
+      // bag-full auto-sell — a stack merge must never be lost to a full bag)
+      if (item.kind === 'material') {
+        const existing = this.inventory.find((it) => it.kind === 'material' && it.matId === item.matId);
+        if (existing) { existing.qty += item.qty; return; }
+      }
       if (this.inventory.length >= 24) {
         // bag full — auto-sell so drops are never silently lost
         this.gold += item.value;
@@ -511,7 +547,8 @@ export function updatePlayer(game, dt, elapsed) {
   if (player.alive) {
     const inCombat = player.combatTimer > 0;
     const hpRate = inCombat ? 0.002 + regenBonus(player.talents) : 0.02;   // Lifeblood
-    const mpMul = manaRegenMult(player.talents);                           // Attunement
+    let mpMul = manaRegenMult(player.talents);                             // Attunement
+    if (player.elixirT > 0 && player.elixirEffect.stat === 'manaRegen') mpMul *= (1 + player.elixirEffect.amount);
     player.hp = Math.min(player.maxHp, player.hp + player.maxHp * hpRate * dt);
     player.mp = Math.min(player.maxMp, player.mp + player.maxMp * (inCombat ? 0.015 : 0.045) * mpMul * dt);
     // Living Stone: Stoneform doubles as a recovery window
@@ -529,6 +566,8 @@ export function updatePlayer(game, dt, elapsed) {
   player.slipstreamT = Math.max(0, player.slipstreamT - dt);
   player.skystepT = Math.max(0, player.skystepT - dt);
   player.undyingCd = Math.max(0, player.undyingCd - dt);
+  player.elixirT = Math.max(0, player.elixirT - dt);
+  if (player.elixirT <= 0) player.elixirEffect = null;
   for (const k in player.cooldowns) player.cooldowns[k] = Math.max(0, player.cooldowns[k] - dt);
 
   // --- movement ---
@@ -558,6 +597,7 @@ export function updatePlayer(game, dt, elapsed) {
       }
       if (player.slipstreamT > 0) spd *= SLIPSTREAM_MULT;
       if (player.skystepT > 0) spd *= SKYSTEP_MULT;
+      if (player.elixirT > 0 && player.elixirEffect.stat === 'speed') spd *= (1 + player.elixirEffect.amount);
       const nx = g.position.x + moveDir.x * spd * dt;
       const nz = g.position.z + moveDir.z * spd * dt;
       const zb = ZONE_BOUNDS[game.zone] || ZONE_BOUNDS.world;

@@ -10,7 +10,7 @@ each iteration ends in a green `vite build` and a commit.
 | 1 | Design pass → `EXPANSION.md` spec ("The Hollow Hour", 106–120) | ✅ done |
 | 2 | **A** — The Verdant Hollow zone (106–118): mobs, Greta's chain, Vorthal | ✅ done |
 | 3 | **B** — The Last Hour dungeon (116–120): 4 NEW mechanic kinds, cap → 120 | ✅ done |
-| 4 | **C** — Crafting/gathering + item sets + new class skills | pending |
+| 4 | **C** — Crafting/gathering + item sets + new class skills | ✅ done |
 | 5 | **D** — Achievements/Bestiary panel (K) + titles | pending |
 | 6 | **E** — Hidden layer: the Larder, treasure maps, mimics, Grim, riddles | pending |
 | 7 | Balance audit, smoke test, docs (README/PLAN) | pending |
@@ -108,3 +108,36 @@ parallel authors on disjoint new files → single integrator for hub files
   (2.5, −329); entry cogwraith pack moved z216→221 so the arrival swirl
   is outside its aggro radius (jank fix, not a nerf — pack still guards
   the entry corridor).
+
+### Iteration 4 — C: Crafting + Sets + Class skills (2026-06-12) ✅
+
+- Workflow `iteration-c-crafting-sets-skills` (11 agents, ~1.12M tokens):
+  planner → 3 parallel authors (gather / itemsys / skills) → integrator →
+  interleaved review+smoke loop. Build green, zero blockers, smoke PASS.
+- **Gathering** (`src/gathering.js`): procedural resource nodes across
+  zones (incl. Hollow spore-pods), F-interact with cast feel, 120s
+  respawn, depletion persists positionally via `nodesDepleted` (v5).
+- **Crafting**: Smith Halla's Bench on key B — materials as stacking
+  items, elixirs (speed/dmgPct/manaRegen/crit/healPct — audited: zero
+  damage-reduction anywhere), Hollowforge Kit (pick a slot → epic
+  ilvl-115 roll), the 25k-gold relic reforge (+12%, once per unique,
+  latched). Arbitrage-safe: crafted sell values ≪ material cost
+  (30,448g kit → 223g sell).
+- **Item sets**: 4 sets with 2pc/4pc bonuses folded into
+  `totalEquippedStats` in one place; tooltips + character sheet display
+  (e.g. Vestments of the First Spring 2pc = +6% healPower). Clean
+  unequip, set re-applied from setId on load.
+- **Class skills**: one control active per class at level 55 (bar idx 4 /
+  key 5; dual-class secondary lands at idx 11 / key =). Trash: real
+  stun/root (1.5s). Bosses/elites: ALL 18 elite-tier enemies carry
+  `ccImmune` → 0.5s stagger; interrupt skills still cancel casts
+  (verified atomically: 3 telegraph meshes removed by one Shield Bash).
+- Smoke evidence: gold/material deltas exact on craft; +763 hp on equip;
+  set bonus 0→0.06→0 across equip/unequip; v5 roundtrip incl. learned
+  skills/materials/sets; console clean (one non-reproducing
+  BufferGeometry-NaN transient noted, not traceable to C's diff).
+- Orchestrator post-fix: KeyB no longer toggles the craft panel when B
+  is consumed as the Konami sequence's 9th input (konamiIdx===9 guard).
+- Design note (accepted): elixirs have no drink cooldown → perpetual
+  single-buff uptime is the steady state; the lever if ever needed is a
+  drink cd, never DR.

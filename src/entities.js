@@ -20,7 +20,7 @@ const ENEMY_TYPES = {
   boss: {
     name: 'Bodo the Ravager', level: 5, hp: 1400, dmgMin: 18, dmgMax: 28, xp: 100,
     speed: 4.0, aggroRadius: 14, attackRange: 3.2, gold: [40, 60], build: () => buildBoar(true),
-    elite: true,
+    elite: true, ccImmune: true,
   },
   bandit: {
     name: 'Grimblade Bandit', level: 8, hp: 450, dmgMin: 22, dmgMax: 32, xp: 35,
@@ -31,14 +31,14 @@ const ENEMY_TYPES = {
     name: 'Rurik the Red', level: 12, hp: 3000, dmgMin: 75, dmgMax: 110, xp: 120,
     speed: 4.6, aggroRadius: 13, attackRange: 2.9, gold: [80, 120],
     build: () => { const g = buildHumanoid('banditking'); g.scale.setScalar(1.35); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
   },
   // ---- the Trials: endgame bosses with mechanics ----
   korgrim: {
     name: 'Korgrim the Mountain', level: 25, hp: 24000, dmgMin: 150, dmgMax: 210, xp: 600,
     speed: 3.6, aggroRadius: 13, attackRange: 4.2, gold: [600, 900], respawn: 120, leash: 50,
     build: () => { const g = buildHumanoid('giant'); g.scale.setScalar(2.7); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [{
       kind: 'slam', interval: 8, telegraph: 1.5, radius: 8.5, dmg: 380,
       center: 'boss', avoid: 'jump', color: 0xffaa30,
@@ -50,7 +50,7 @@ const ENEMY_TYPES = {
     name: 'Vexnar the Ash Dragon', level: 30, hp: 32000, dmgMin: 190, dmgMax: 260, xp: 1000,
     speed: 4.4, aggroRadius: 14, attackRange: 4.6, gold: [1000, 1500], respawn: 150, leash: 50,
     build: () => buildDragon(),
-    elite: true,
+    elite: true, ccImmune: true,
     mechanics: [{
       kind: 'zone', interval: 7, telegraph: 1.6, radius: 5.5, dmg: 480,
       center: 'player', avoid: 'move', color: 0xff5020,
@@ -62,7 +62,7 @@ const ENEMY_TYPES = {
     name: 'Morgrath, the Pale King', level: 37, hp: 40000, dmgMin: 230, dmgMax: 310, xp: 2000,
     speed: 4.8, aggroRadius: 13, attackRange: 3.4, gold: [1800, 2600], respawn: 180, leash: 50,
     build: () => { const g = buildHumanoid('paleking'); g.scale.setScalar(1.8); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [{
       kind: 'zone', interval: 9, telegraph: 1.5, radius: 5, dmg: 520,
       center: 'player', avoid: 'move', color: 0xb090ff,
@@ -88,7 +88,7 @@ const ENEMY_TYPES = {
     name: 'Gravelord Ossus', level: 49, hp: 55000, dmgMin: 330, dmgMax: 430, xp: 1100,
     speed: 4.4, aggroRadius: 15, attackRange: 3.4, gold: [3000, 4500], respawn: 240, wanderR: 2, leash: 80,
     build: () => { const g = buildHumanoid('gravelord'); g.scale.setScalar(2.0); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [{
       kind: 'zone', interval: 7, telegraph: 1.5, radius: 6, dmg: 850,
       center: 'player', avoid: 'move', color: 0x7aff9a,
@@ -101,7 +101,7 @@ const ENEMY_TYPES = {
     name: 'Vargoth the Undying', level: 55, hp: 85000, dmgMin: 400, dmgMax: 500, xp: 2100,
     speed: 4.6, aggroRadius: 16, attackRange: 3.6, gold: [8000, 12000], respawn: 300, wanderR: 2, leash: 80,
     build: () => { const g = buildHumanoid('undying'); g.scale.setScalar(2.2); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [
       {
         kind: 'slam', interval: 9, telegraph: 1.5, radius: 9, dmg: 800,
@@ -158,7 +158,7 @@ const ENEMY_TYPES = {
     speed: 4.2, aggroRadius: 15, attackRange: 3.6, gold: [4000, 6000],
     respawn: 240, leash: 60, wanderR: 2, armor: 44,
     build: () => { const g = buildHumanoid('undying'); g.scale.setScalar(2.0); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [{
       kind: 'zone', interval: 7, telegraph: 1.5, radius: 6, dmg: 1152,
       center: 'player', avoid: 'move', color: 0xff5020,
@@ -177,7 +177,7 @@ const ENEMY_TYPES = {
     speed: 4.6, aggroRadius: 18, attackRange: 5.0, gold: [15000, 22000],
     respawn: 300, leash: 90, wanderR: 2, armor: 47,
     build: () => { const g = buildDragon(); g.scale.setScalar(1.25); return g; },  // beast: faces +X
-    elite: true,
+    elite: true, ccImmune: true,
     mechanics: [
       { // (1) SLAM — jump
         kind: 'slam', interval: 10, telegraph: 1.5, radius: 10, dmg: 1294,
@@ -231,7 +231,7 @@ const ENEMY_TYPES = {
     speed: 4.2, aggroRadius: 15, attackRange: 4.0, gold: [7000, 10000],
     respawn: 240, leash: 60, wanderR: 2, armor: 60,
     build: () => { const g = buildHumanoid('frostjarl'); g.scale.setScalar(2.4); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [{
       kind: 'slam', interval: 8, telegraph: 1.5, radius: 9, dmg: 1466,
       center: 'boss', avoid: 'jump', color: 0x9fe8ff,
@@ -257,7 +257,7 @@ const ENEMY_TYPES = {
     speed: 4.4, aggroRadius: 13, attackRange: 3.4, gold: [12000, 18000],
     respawn: 240, leash: 80, wanderR: 2, armor: 68,
     build: () => { const g = buildHumanoid('vaultwarden'); g.scale.setScalar(2.0); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [
       { kind: 'zone', interval: 7, telegraph: 1.5, radius: 6, dmg: 1632,
         center: 'player', avoid: 'move', color: 0xcfe8ff,
@@ -278,7 +278,7 @@ const ENEMY_TYPES = {
     speed: 4.6, aggroRadius: 16, attackRange: 3.8, gold: [26000, 38000],
     respawn: 300, leash: 80, wanderR: 2, armor: 72,
     build: () => { const g = buildHumanoid('hollowstar'); g.scale.setScalar(2.4); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [
       { kind: 'slam', interval: 10, telegraph: 1.5, radius: 10, dmg: 1798,   // 42% of 4280
         center: 'boss', avoid: 'jump', color: 0xffd87a,
@@ -303,7 +303,7 @@ const ENEMY_TYPES = {
     speed: 5.0, aggroRadius: 22, attackRange: 3.4, gold: [9000, 14000],
     respawn: 900, leash: 50, wanderR: 4,
     build: () => { const g = buildBoar(true, 'gold'); g.scale.setScalar(3.2); return g; },  // beast: +X
-    elite: true,
+    elite: true, ccImmune: true,
     mechanics: [{
       kind: 'slam', interval: 9, telegraph: 1.5, radius: 9, dmg: 1584,
       center: 'boss', avoid: 'jump', color: 0xffaa30,
@@ -351,7 +351,7 @@ const ENEMY_TYPES = {
     speed: 4.2, aggroRadius: 15, attackRange: 4.0, gold: [9000, 13000],
     respawn: 240, leash: 60, wanderR: 2, armor: 74,
     build: () => { const g = buildHumanoid('bloomwarden'); g.scale.setScalar(2.4); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [{
       kind: 'zone', interval: 8, telegraph: 1.5, radius: 6, dmg: 1840,   // 39% of L116 maxHp 4720
       center: 'player', avoid: 'move', color: 0xff5ea8,
@@ -367,7 +367,7 @@ const ENEMY_TYPES = {
     speed: 4.6, aggroRadius: 18, attackRange: 5.0, gold: [30000, 44000],
     respawn: 300, leash: 90, wanderR: 2, armor: 80,
     build: () => { const g = buildDragon(); g.scale.setScalar(1.35); return g; },  // beast +X
-    elite: true,
+    elite: true, ccImmune: true,
     mechanics: [
       { kind: 'slam', interval: 10, telegraph: 1.5, radius: 10, dmg: 2016,        // 42% of 4800
         center: 'boss', avoid: 'jump', color: 0x9fffb0,
@@ -406,7 +406,7 @@ const ENEMY_TYPES = {
     speed: 4.2, aggroRadius: 15, attackRange: 4.0, gold: [9000, 13000],
     respawn: 240, leash: 90, wanderR: 2, armor: 78,
     build: () => { const g = buildHumanoid('golem'); g.scale.setScalar(2.2); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [
       { kind: 'beam', interval: 9, telegraph: 2.2, length: 22, halfArc: 0.34, sweep: 2.4, radius: 22, dmg: 1888,
         center: 'boss', avoid: 'dodge', color: 0xff4d6d,
@@ -424,7 +424,7 @@ const ENEMY_TYPES = {
     speed: 4.4, aggroRadius: 15, attackRange: 4.0, gold: [11000, 16000],
     respawn: 240, leash: 90, wanderR: 2, armor: 80,
     build: () => { const g = buildHumanoid('wraith'); g.scale.setScalar(2.0); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     mechanics: [
       { kind: 'tether', interval: 10, telegraph: 2.4, breakDist: 10, radius: 10, pullBack: true, dmg: 1920,
         center: 'player', avoid: 'flee', color: 0xb06bff,
@@ -445,7 +445,7 @@ const ENEMY_TYPES = {
     speed: 4.6, aggroRadius: 16, attackRange: 4.0, gold: [30000, 45000],
     respawn: 600, leash: 90, wanderR: 2, armor: 82,
     build: () => { const g = buildHumanoid('khronaxis'); g.scale.setScalar(2.6); attachGearHaloes(g); return g; },
-    humanoid: true, elite: true,
+    humanoid: true, elite: true, ccImmune: true,
     enrageAt: 200, enrageMult: 1.6,
     mechanics: [
       { kind: 'shatterfloor', interval: 13, telegraph: 2.0, tile: 4, parity: 'auto', radius: 18, dmg: 2098,
@@ -528,6 +528,8 @@ function makeEnemy(kind, x, z) {
     combatT: 0,                 // accumulates while engaged; drives Khronaxis' enrage
     _shatterCount: 0,           // per-enemy shatterfloor parity counter ('auto')
     _enraged: false,            // latches the one-time enrage announce
+    // crowd-control state from the level-55 class skills (all transient)
+    ccT: 0, rooted: false, snareT: 0, snareAmt: 0, silenceT: 0,
   };
 }
 
@@ -1312,6 +1314,27 @@ export function updateEnemies(game, dt, elapsed) {
       if (e.anim.attackT >= 1) e.anim.attackT = -1;
     }
 
+    // crowd control: tick down the timers from the level-55 class skills.
+    e.ccT = Math.max(0, e.ccT - dt);
+    e.snareT = Math.max(0, e.snareT - dt);
+    e.silenceT = Math.max(0, e.silenceT - dt);
+    if (e.ccT <= 0) e.rooted = false;
+    // SIMPLIFICATION: while ccT>0 (stun OR root) we freeze BOTH movement and the
+    // attack swing. Spec wants root to block movement only, but roots come only
+    // from Frost Nova (2s, on trash packs you're already AoEing) and bosses are
+    // ccImmune (0.5s stagger), so a unified short freeze is the pragmatic choice.
+    // Keep death/respawn/animation alive so a stunned mob still reads as present.
+    if (e.ccT > 0) {
+      e.anim.moving = false;
+      e.anim.attackT = -1;
+      e.pendingHit = -1;
+      if (e.humanoid) animateHumanoid(e.group, e.anim, elapsed + e.home.x);
+      else if (t.serpent) animateSerpent(e.group, e.anim, elapsed + e.home.x);
+      else if (t.sporeling) animateSporeling(e.group, e.anim, elapsed + e.home.x);
+      else animateBeast(e.group, e.anim, elapsed + e.home.x);
+      continue;
+    }
+
     switch (e.state) {
       case 'idle':
         e.anim.moving = false;
@@ -1330,7 +1353,8 @@ export function updateEnemies(game, dt, elapsed) {
       case 'wander': {
         e.anim.moving = true;
         e.anim.speed = 0.55;
-        const d = moveToward(e, e.wanderTarget, t.speed * 0.45, dt);
+        const sp = t.speed * 0.45 * (e.snareT > 0 ? (1 - e.snareAmt) : 1);   // Hamstring slow
+        const d = moveToward(e, e.wanderTarget, sp, dt);
         if (d < 0.3) { e.state = 'idle'; e.stateTimer = 2 + Math.random() * 4; }
         break;
       }
@@ -1341,7 +1365,8 @@ export function updateEnemies(game, dt, elapsed) {
         e.anim.moving = true;
         e.anim.speed = 1;
         if (distToPlayer > t.attackRange) {
-          moveToward(e, pPos, t.speed, dt);
+          const sp = t.speed * (e.snareT > 0 ? (1 - e.snareAmt) : 1);   // Hamstring slow
+          moveToward(e, pPos, sp, dt);
         } else {
           e.state = 'attack';
         }
@@ -1398,8 +1423,8 @@ export function updateEnemies(game, dt, elapsed) {
       }
     }
 
-    // boss mechanics fire while engaged
-    if (t.mechanics && player.alive && (e.state === 'chase' || e.state === 'attack')) {
+    // boss mechanics fire while engaged (silence suppresses the "casting")
+    if (t.mechanics && player.alive && e.silenceT <= 0 && (e.state === 'chase' || e.state === 'attack')) {
       e.mechTimer -= dt;
       if (e.mechTimer <= 0) {
         const mech = t.mechanics[Math.floor(Math.random() * t.mechanics.length)];

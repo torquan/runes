@@ -41,6 +41,8 @@ export const CLASS_STYLES = {
   cogwraith:  { tunic: 0x14161f, trim: 0x8a6a2a, weapon: 'staff', skin: 0x6a6a72 },  // basalt revenant, brass-veined
   khronaxis:  { tunic: 0x1a1d2e, trim: 0x8a6a2a, weapon: 'staff', skin: 0x4a4a5a },  // the kept hour, brass-haloed
   tamsin:     { tunic: 0x2e3a4a, trim: 0x8a6a2a, weapon: 'none' },                   // time-broken survivor (questgiver NPC)
+  // ---- Iteration C: the bench ----
+  smith:      { tunic: 0x6a5240, trim: 0xb08040, weapon: 'none', skin: 0xc89a6a },   // Smith Halla: leather-apron browns, brass trim
 };
 
 export function buildHumanoid(style) {

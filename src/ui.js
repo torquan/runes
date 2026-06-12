@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { fbm, heightAt, WORLD_SIZE, HIGHLANDS } from './noise.js';
 import { SHOP, xpForLevel } from './player.js';
-import { RARITY, rarityColor, statSummary, totalEquippedStats, ALL_SLOTS } from './items.js';
+import { RARITY, rarityColor, statSummary, totalEquippedStats, ALL_SLOTS,
+         RECIPES, SETS, MATERIALS, canCraft, craft, equippedSetCounts } from './items.js';
 import { BRANCHES, ranks, CAPSTONE_THRESHOLD, BRANCH_CAP, MASTERY_THRESHOLD,
          MASTERIES, CHOICE_NODES, choiceNodeFor, choiceOf, capstoneFor,
          spentTotal, TOTAL_RANKS } from './talents.js';
@@ -99,7 +100,7 @@ export function createUi() {
       list.forEach((skill, i) => {
         const isCap = i >= capStart;
         const color = isCap ? primaryColor : skill.color;
-        const keyLabel = i < 9 ? String(i + 1) : (i === 9 ? '0' : '-');  // keys 1-9,0,-
+        const keyLabel = i < 9 ? String(i + 1) : i === 9 ? '0' : i === 10 ? '-' : '=';  // keys 1-9,0,-,=
         const slot = document.createElement('div');
         slot.className = 'skill-slot' + (isCap ? ' capstone' : '');
         slot.innerHTML = `
@@ -452,13 +453,21 @@ export function createUi() {
           this._attachTip(cell, it, p);
           cell.onclick = selling
             ? () => { p.sellItem(game, it); this.renderInventory(game); this.update(game); }
-            : () => { p.equip(game, it); this.renderInventory(game); };
+            : it.kind === 'elixir'
+              ? () => { p.drinkElixir(game, it); this.renderInventory(game); }
+              : it.kind === 'material'
+                ? null   // materials don't equip or do anything on click
+                : () => { p.equip(game, it); this.renderInventory(game); };
         }
         grid.appendChild(cell);
       }
     },
 
     _itemCellHTML(it) {
+      // materials/elixirs carry their own emoji + a stack count instead of a slot glyph
+      if (it.kind === 'material' || it.kind === 'elixir') {
+        return `<span class="inv-icon">${it.icon}</span>${it.qty > 1 ? `<span class="inv-qty">${it.qty}</span>` : ''}`;
+      }
       const icon = { weapon: '⚔', armor: '⛨', trinket: '✦', relic: '◆' }[it.slot];
       return `<span class="inv-icon" style="color:${rarityColor(it.rarity)}">${icon}</span>`;
     },
@@ -474,7 +483,7 @@ export function createUi() {
           return d;
         })();
         const equipped = player.equipped[item.slot];
-        tip.innerHTML = this._tipHTML(item, equipped);
+        tip.innerHTML = this._tipHTML(item, equipped, player);
         tip.style.display = 'block';
         const r = cell.getBoundingClientRect();
         tip.style.left = `${r.right + 8}px`;
@@ -484,10 +493,13 @@ export function createUi() {
     },
 
     // all strings here are developer-authored (item.name/flavor from items.js) — HTML-safe
-    _tipHTML(item, equipped) {
+    _tipHTML(item, equipped, player) {
       const color = rarityColor(item.rarity);
+      const kindLabel = item.kind === 'material' ? 'Material'
+        : item.kind === 'elixir' ? 'Elixir'
+        : `${RARITY[item.rarity].label} ${item.slot}${item.unique ? ' · Unique' : ''}${item.reforged ? ' · Reforged' : ''}`;
       let body = `<div class="tip-name" style="color:${color}">${item.name}</div>`;
-      body += `<div class="tip-sub">${RARITY[item.rarity].label} ${item.slot}${item.unique ? ' · Unique' : ''}</div>`;
+      body += `<div class="tip-sub">${kindLabel}</div>`;
       // stat lines with compare deltas vs currently equipped in that slot —
       // include axes only the equipped item has, so losses aren't hidden
       const axes = ['dmg', 'hp', 'crit', 'speed', 'healPower'];
@@ -502,6 +514,28 @@ export function createUi() {
           ? `<div class="tip-stat">+${fmt(v)} ${ax}${equipped && d !== 0 ? ` <span class="${cls}">(${d > 0 ? '+' : ''}${fmt(d)})</span>` : ''}</div>`
           : `<div class="tip-stat"><span class="stat-down">−${fmt(e)} ${ax}</span></div>`;
       }
+      // set-piece block: list all 4 piece names (green if owned/equipped) + bonus
+      // lines + the active (n/4) count off the player's equipped set tally
+      if (item.setId && SETS[item.setId]) {
+        const s = SETS[item.setId];
+        const have = new Set();
+        if (player) {
+          for (const slot of ALL_SLOTS) {
+            const eq = player.equipped[slot];
+            if (eq && eq.setId === item.setId) have.add(slot);
+          }
+          for (const it of player.inventory) if (it.setId === item.setId) have.add(it.slot);
+        }
+        const count = player ? (equippedSetCounts(player.equipped)[item.setId] || 0) : 0;
+        body += `<div class="tip-set"><b>${s.name} (${count}/4)</b>`;
+        for (const slot of ALL_SLOTS) {
+          const owned = have.has(slot);
+          body += `<div class="tip-set-piece${owned ? ' owned' : ''}">${s.pieces[slot].name}</div>`;
+        }
+        body += `<div class="tip-set-bonus${count >= 2 ? ' on' : ''}">(2) ${statSummary(s.bonus2)}</div>`;
+        body += `<div class="tip-set-bonus${count >= 4 ? ' on' : ''}">(4) ${statSummary(s.bonus4)}</div>`;
+        body += `</div>`;
+      }
       if (item.flavor) body += `<div class="tip-flavor">${item.flavor}</div>`;
       if (item.value) body += `<div class="tip-value">Sells for ${item.value} g</div>`;
       return body;
@@ -512,6 +546,152 @@ export function createUi() {
     hideCharSheet() { $('char-panel').classList.add('hidden'); },
     charOpen() { return !$('char-panel').classList.contains('hidden'); },
     toggleCharSheet(game) { this.charOpen() ? this.hideCharSheet() : this.showCharSheet(game); },
+
+    // ---------- crafting bench (Smith Halla; opens from F near her / B) ----------
+    showCraft(game) { this.renderCraft(game); $('craft-panel').classList.remove('hidden'); },
+    hideCraft() { $('craft-panel').classList.add('hidden'); this._craftPick = null; },
+    craftOpen() { return !$('craft-panel').classList.contains('hidden'); },
+    toggleCraft(game) { this.craftOpen() ? this.hideCraft() : this.showCraft(game); },
+
+    // recipe list + owned-material strip. All strings here are developer-authored
+    // (recipe/material/slot names from items.js) — HTML-safe per the innerHTML policy.
+    renderCraft(game) {
+      const p = game.player;
+      const owned = (matId) => p.inventory.find((i) => i.matId === matId)?.qty || 0;
+
+      // owned-material strip
+      const mats = $('craft-mats');
+      mats.innerHTML = Object.keys(MATERIALS).map((k) => {
+        const q = owned(k);
+        return `<span class="craft-have${q ? '' : ' zero'}" title="${MATERIALS[k].name}">
+          <span class="ch-icon">${MATERIALS[k].icon}</span><span class="ch-qty">${q}</span></span>`;
+      }).join('');
+
+      // recipe rows
+      const rows = $('craft-rows');
+      rows.innerHTML = '';
+      // expanded picker state: { recipeId, mode:'slot'|'item' } drives an inline picker
+      const pick = this._craftPick;
+
+      // bag elixirs get a "Drink" affordance up top of their recipe rows; collect once
+      const bagElixirs = p.inventory.filter((i) => i.kind === 'elixir');
+
+      for (const recipe of RECIPES) {
+        const can = canCraft(p, recipe);
+        const costHtml = Object.keys(recipe.cost).map((m) => {
+          const have = owned(m), need = recipe.cost[m];
+          return `<span class="craft-mat${have < need ? ' short' : ''}">${MATERIALS[m].icon} ${have}/${need}</span>`;
+        }).join('');
+        const goldHtml = `<span class="craft-gold${p.gold < recipe.gold ? ' short' : ''}">${recipe.gold} g</span>`;
+
+        const row = document.createElement('div');
+        row.className = 'craft-row';
+        row.innerHTML = `
+          <span class="craft-icon">${recipe.icon}</span>
+          <span class="craft-info">
+            <b>${recipe.name}</b>
+            <span class="craft-desc">${recipe.desc}</span>
+            <span class="craft-cost">${costHtml}${goldHtml}</span>
+          </span>`;
+        const btn = document.createElement('button');
+        btn.className = 'btn-ornate craft-btn';
+        btn.textContent = 'Craft';
+        btn.disabled = !can;
+        btn.addEventListener('click', () => {
+          if (recipe.kind === 'gear' && recipe.gen.slot === 'PICK') {
+            this._craftPick = { recipeId: recipe.id, mode: 'slot' };
+            this.renderCraft(game);
+          } else if (recipe.kind === 'upgrade') {
+            this._craftPick = { recipeId: recipe.id, mode: 'item' };
+            this.renderCraft(game);
+          } else {
+            craft(game, recipe, {});
+            this._craftPick = null;
+            this.renderCraft(game);
+            if (this.inventoryOpen()) this.renderInventory(game);
+          }
+        });
+        row.appendChild(btn);
+        rows.appendChild(row);
+
+        // inline picker, expanded under the active recipe
+        if (pick && pick.recipeId === recipe.id) {
+          const picker = document.createElement('div');
+          picker.className = 'craft-picker';
+          if (pick.mode === 'slot') {
+            for (const slot of ALL_SLOTS) {
+              const sb = document.createElement('button');
+              sb.className = 'btn-ornate btn-mini';
+              sb.textContent = slot[0].toUpperCase() + slot.slice(1);
+              sb.addEventListener('click', () => {
+                craft(game, recipe, { slot });
+                this._craftPick = null;
+                this.renderCraft(game);
+                if (this.inventoryOpen()) this.renderInventory(game);
+              });
+              picker.appendChild(sb);
+            }
+          } else if (pick.mode === 'item') {
+            const eligible = [...p.inventory, ...ALL_SLOTS.map((s) => p.equipped[s])]
+              .filter((it) => it && it.unique && !it.reforged);
+            if (!eligible.length) {
+              picker.innerHTML = '<span class="craft-desc">No un-reforged uniques to re-temper.</span>';
+            } else {
+              for (const it of eligible) {
+                const ib = document.createElement('button');
+                ib.className = 'btn-ornate btn-mini';
+                ib.textContent = it.name;
+                ib.style.color = rarityColor(it.rarity);
+                ib.addEventListener('click', () => {
+                  this.showDialog({
+                    title: 'Smith Halla',
+                    text: "Re-temper this? The metal remembers being whole. It'll hold more of you. Once, mind — twice and it shatters.",
+                    buttons: [
+                      { label: 'Re-temper it', primary: true, action: () => {
+                        this.hideDialog();
+                        craft(game, recipe, { item: it });
+                        this._craftPick = null;
+                        this.showCraft(game);
+                        if (this.inventoryOpen()) this.renderInventory(game);
+                      } },
+                      { label: 'Not yet', action: () => { this.hideDialog(); this.showCraft(game); } },
+                    ],
+                  });
+                });
+                picker.appendChild(ib);
+              }
+            }
+          }
+          rows.appendChild(picker);
+        }
+      }
+
+      // drink-from-bag affordance: any elixirs already brewed
+      if (bagElixirs.length) {
+        const head = document.createElement('div');
+        head.className = 'char-section';
+        head.textContent = 'Your Elixirs';
+        rows.appendChild(head);
+        for (const it of bagElixirs) {
+          const row = document.createElement('div');
+          row.className = 'craft-row';
+          row.innerHTML = `
+            <span class="craft-icon">${it.icon}</span>
+            <span class="craft-info"><b>${it.name}${it.qty > 1 ? ` ×${it.qty}` : ''}</b>
+              <span class="craft-desc">${it.flavor || ''}</span></span>`;
+          const db = document.createElement('button');
+          db.className = 'btn-ornate craft-btn';
+          db.textContent = 'Drink';
+          db.addEventListener('click', () => {
+            game.player.drinkElixir(game, it);
+            this.renderCraft(game);
+            if (this.inventoryOpen()) this.renderInventory(game);
+          });
+          row.appendChild(db);
+          rows.appendChild(row);
+        }
+      }
+    },
 
     // all strings here are developer-authored (class/item/branch names) — HTML-safe
     renderCharSheet(game) {
@@ -558,6 +738,20 @@ export function createUi() {
       }
       const t = totalEquippedStats(p.equipped);
       html += `<div class="char-gear-sum">${statSummary(t) || 'No gear equipped'}</div>`;
+
+      // Set Bonuses — active bonus summary per equipped set (2pc, +4pc merged at ≥4)
+      const counts = equippedSetCounts(p.equipped);
+      const activeSets = Object.keys(counts).filter((sid) => counts[sid] >= 2 && SETS[sid]);
+      if (activeSets.length) {
+        html += `<div class="char-section">Set Bonuses</div>`;
+        for (const sid of activeSets) {
+          const s = SETS[sid];
+          // merge bonus2 + bonus4 (summing shared axes) when 4+ pieces are worn
+          let active = { ...s.bonus2 };
+          if (counts[sid] >= 4) for (const ax in s.bonus4) active[ax] = (active[ax] || 0) + s.bonus4[ax];
+          html += row(s.name, `${counts[sid]}/4`, statSummary(active));
+        }
+      }
 
       // Phial of Starlight toggle (cosmetic; purchase state in p.glow)
       if (p.glow) {

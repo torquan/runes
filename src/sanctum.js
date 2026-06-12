@@ -11,6 +11,8 @@ const WALL_H = 5;
 
 // wall segments as thin AABBs: [x1, z1, x2, z2] (axis-aligned, thickness 1).
 // crypt plan rotated to run south->north; doors at x in [-2, 2].
+// NOTE: gathering.js mirrors these room interiors (SANCTUM_ROOMS) to keep its
+// star-shard nodes on walkable floor — keep the two in sync if the plan changes.
 const WALLS = [
   // entry room x -11..11, z 258..280
   [-11, 258, -10, 280], [10, 258, 11, 280], [-11, 258, 11, 259],

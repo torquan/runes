@@ -223,14 +223,25 @@ export function statSummary(stats) {
   return parts.join(' · ');
 }
 
-// sum the equipped {weapon,armor,trinket,relic} (item-or-null) per axis
+// sum the equipped {weapon,armor,trinket,relic} (item-or-null) per axis, then
+// fold in set bonuses (2pc/4pc) so gearStat()/recalcStats inherit them for free.
+// Output shape is FROZEN: {dmg,hp,crit,speed,healPower} — set axes are all
+// throughput/sustain (NO DR axis exists in this type, by policy).
 export function totalEquippedStats(equipped) {
   const out = { dmg: 0, hp: 0, crit: 0, speed: 0, healPower: 0 };
   if (!equipped) return out;
+  const counts = {};
   for (const slot of ALL_SLOTS) {
     const it = equipped[slot];
     if (!it || !it.stats) continue;
     for (const ax in out) out[ax] += it.stats[ax] || 0;
+    if (it.setId) counts[it.setId] = (counts[it.setId] || 0) + 1;
+  }
+  for (const sid in counts) {
+    const s = SETS[sid];
+    if (!s) continue;
+    if (counts[sid] >= 2) for (const ax in s.bonus2) out[ax] += s.bonus2[ax];
+    if (counts[sid] >= 4) for (const ax in s.bonus4) out[ax] += s.bonus4[ax];
   }
   return out;
 }
@@ -303,6 +314,225 @@ export function makeUnique(kind) {
 const SLOTS = ['weapon', 'armor', 'trinket'];          // legacy mobs roll only these three
 export const ALL_SLOTS = [...SLOTS, 'relic'];          // totalEquippedStats + UI iterate this
 
+// ===========================================================================
+// Iteration C — Crafting + Sets (materials, elixirs, recipes, item sets)
+// HARD RULE: every axis below is throughput/sustain/utility
+// (dmg/hp/crit/speed/healPower/manaRegen-style timer). NO damage-reduction, NO
+// dodge — not in elixirs, not in set bonuses, not in craft gear. Stoneform stays
+// the only active DR window.
+// ===========================================================================
+
+// ---------- crafting materials (inventory items, tagged kind:'material') ----------
+// matIds FROZEN: gather + player.addItem (stacks by matId) + craft all depend on
+// this shape. slot:null / stats:{} means equip + totalEquippedStats already skip
+// them. Zone-band tiers: 1 meadow → 5 Hollow/boss-gated.
+export const MATERIALS = {
+  fiber:        { matId: 'fiber',        name: 'Meadow Fiber',        icon: '🌿', tier: 1, flavor: 'Tough grass. Smells of home.' },
+  cinderbark:   { matId: 'cinderbark',   name: 'Cinderbark Resin',    icon: '🔥', tier: 2, flavor: 'Sap that never fully cooled.' },
+  frostcore:    { matId: 'frostcore',    name: 'Frostcore Shard',     icon: '❄',  tier: 3, flavor: 'Cold that bites back through the glove.' },
+  stardust:     { matId: 'stardust',     name: 'Captured Stardust',   icon: '✦',  tier: 4, flavor: 'A pinch of the gate that fell.' },
+  sporesilk:    { matId: 'sporesilk',    name: 'Spore-Silk',          icon: '🍄', tier: 5, flavor: 'Spun by a thing that should not weave.' },
+  sealfragment: { matId: 'sealfragment', name: 'Fragment of the Seal',icon: '◈',  tier: 5, flavor: 'It still wants to lock something.' },
+};
+
+// FROZEN item shape — gather.gatherNode + items.craft both build via this.
+export function makeMaterial(matId, qty = 1) {
+  const m = MATERIALS[matId];
+  if (!m) return null;
+  return {
+    uid: rollUid(), id: matId, matId, name: m.name, icon: m.icon, kind: 'material',
+    slot: null, rarity: 'common', stats: {}, value: Math.max(1, m.tier * 8), qty, flavor: m.flavor,
+  };
+}
+
+// enemy.level → the zone-band material it drops (rollDrops + gather use the same
+// banding). Gaps (76–81, 93–95) default to the lower band per spec.
+function zoneMatFor(level) {
+  if (level <= 30) return 'fiber';
+  if (level <= 75) return 'cinderbark';   // 31–75 (76–81 also falls here)
+  if (level <= 92) return 'frostcore';    // 82–92
+  if (level <= 105) return 'stardust';    // 96–105 (93–95 also falls here)
+  return 'sporesilk';                     // ≥106
+}
+
+// ---------- elixirs (consumable timed buffs; player.drinkElixir reads .effect) ----------
+// effect.stat enum FROZEN: 'speed'|'dmgPct'|'crit'|'manaRegen'|'healPct'. itemsys
+// only stamps the data — player.js/combat.js apply it transiently (never saved).
+// These are throughput/utility timers ONLY; the +20% healPct elixir is SUSTAIN,
+// not mitigation. No DR variant exists, by policy.
+export function makeElixirItem(recipe) {
+  return {
+    uid: rollUid(), id: recipe.id, kind: 'elixir', name: recipe.name, icon: recipe.icon,
+    slot: null, rarity: 'uncommon', stats: {}, value: Math.max(5, Math.round(recipe.gold * 0.1)),
+    effect: { ...recipe.effect }, flavor: recipe.desc,
+  };
+}
+
+// ---------- recipes (integrator renders; ids/shape FROZEN) ----------
+export const RECIPES = [
+  // --- utility elixirs (throughput/utility timers, NO DR) ---
+  { id: 'elx_swift', name: 'Elixir of the Hare', icon: '🐇', kind: 'elixir',
+    cost: { fiber: 3 }, gold: 120, effect: { stat: 'speed', amount: 0.25, dur: 30 },
+    desc: '+25% movement speed for 30s. For getting somewhere, not for getting hit less.' },
+  { id: 'elx_fury', name: 'Cinderblood Elixir', icon: '🔥', kind: 'elixir',
+    cost: { cinderbark: 3, fiber: 2 }, gold: 400, effect: { stat: 'dmgPct', amount: 0.12, dur: 30 },
+    desc: '+12% damage for 30s. Tastes of soot and bad decisions.' },
+  { id: 'elx_clarity', name: 'Phial of Clarity', icon: '◈', kind: 'elixir',
+    cost: { frostcore: 2, cinderbark: 1 }, gold: 900, effect: { stat: 'manaRegen', amount: 1.0, dur: 30 },
+    desc: 'Doubles mana regen for 30s. The weave hums closer.' },
+  { id: 'elx_focus', name: 'Starbright Tonic', icon: '✦', kind: 'elixir',
+    cost: { stardust: 2, frostcore: 2 }, gold: 2200, effect: { stat: 'crit', amount: 0.10, dur: 30 },
+    desc: '+10% crit for 30s. Everything looks briefly fragile.' },
+  { id: 'elx_bloom', name: 'Verdant Draught', icon: '🍄', kind: 'elixir',
+    cost: { sporesilk: 2, stardust: 1 }, gold: 3200, effect: { stat: 'healPct', amount: 0.20, dur: 30 },
+    desc: '+20% healing for 30s. The Hollow shares, for once.' },
+  // --- craftable gear: one per tier; choose the slot at the bench ---
+  { id: 'craft_t1', name: 'Pioneer Kit', icon: '⚒', kind: 'gear',
+    cost: { fiber: 8 }, gold: 600, gen: { slot: 'PICK', rarity: 'rare', ilvl: 12 },
+    desc: 'A solid rare piece — ilvl 12. Choose the slot at the bench.' },
+  { id: 'craft_t2', name: 'Cinderforge Kit', icon: '⚒', kind: 'gear',
+    cost: { cinderbark: 8, fiber: 6 }, gold: 4000, gen: { slot: 'PICK', rarity: 'rare', ilvl: 70 },
+    desc: 'Rare ilvl 70 — bridges the Highlands climb.' },
+  { id: 'craft_t3', name: 'Rimeforge Kit', icon: '⚒', kind: 'gear',
+    cost: { frostcore: 8, cinderbark: 4 }, gold: 12000, gen: { slot: 'PICK', rarity: 'epic', ilvl: 92 },
+    desc: 'Epic ilvl 92 — relic-eligible at the bench.' },
+  { id: 'craft_t4', name: 'Hollowforge Kit', icon: '⚒', kind: 'gear',
+    cost: { sporesilk: 8, stardust: 4 }, gold: 30000, gen: { slot: 'PICK', rarity: 'epic', ilvl: 115 },
+    desc: 'Epic ilvl 115 — closes the gap before The Last Hour.' },
+  // --- unique upgrade: +12% to one equipped unique, once ---
+  { id: 'reforge', name: 'Reseal a Relic', icon: '◈', kind: 'upgrade',
+    cost: { sealfragment: 1, stardust: 4 }, gold: 25000,
+    desc: 'Re-temper one unique you own: +12% to all its stats. Once per unique.' },
+];
+
+// gold + every cost material satisfied (integrator drives button-disable off this)
+export function canCraft(player, recipe) {
+  if (!player || player.gold < recipe.gold) return false;
+  for (const m in recipe.cost) {
+    const have = player.inventory.find((i) => i.matId === m)?.qty || 0;
+    if (have < recipe.cost[m]) return false;
+  }
+  return true;
+}
+
+// deduct → produce. opts:{slot} for gear PICK; opts:{item} for reforge. Returns
+// false (no-op) if unaffordable. Materials/elixirs go through addItem (which
+// stacks materials by matId, owned by player.js).
+export function craft(game, recipe, opts) {
+  const p = game.player;
+  if (!canCraft(p, recipe)) return false;
+  for (const m in recipe.cost) {
+    const it = p.inventory.find((i) => i.matId === m);
+    it.qty -= recipe.cost[m];
+    if (it.qty <= 0) p.inventory.splice(p.inventory.indexOf(it), 1);
+  }
+  p.gold -= recipe.gold;
+  if (recipe.kind === 'gear') p.addItem(game, makeGenerated(opts.slot, recipe.gen.rarity, recipe.gen.ilvl));
+  else if (recipe.kind === 'elixir') p.addItem(game, makeElixirItem(recipe));
+  else if (recipe.kind === 'upgrade') reforgeUnique(game, opts.item);
+  game.audio.craftDone();
+  game.ui.log(`Crafted ${recipe.name}.`, 'log-loot');
+  game.save?.();
+  return true;
+}
+
+// re-temper a unique: ×1.12 each existing axis, once. Only scales throughput/
+// sustain axes that already exist (no DR axis to touch).
+export function reforgeUnique(game, item) {
+  if (!item.unique || item.reforged) return false;
+  for (const ax in item.stats) {
+    const v = item.stats[ax] * 1.12;
+    item.stats[ax] = (ax === 'crit' || ax === 'speed' || ax === 'healPower')
+      ? Math.round(v * 1000) / 1000
+      : Math.round(v);
+  }
+  item.reforged = true;
+  item.value = valueOf(item);
+  game.player.recalcStats();
+  game.player.hp = Math.min(game.player.hp, game.player.maxHp);
+  return true;
+}
+
+// ---------- item sets (4 pieces each, one per slot; throughput/sustain only) ----------
+// setIds FROZEN: hunters/warden/starbound/verdant. item.setId is the JOIN KEY for
+// the set-bonus fold in totalEquippedStats + the integrator's tooltip/char-sheet.
+// EVERY bonus axis is dmg/hp/crit/speed/healPower — zero mitigation, by policy.
+export const SETS = {
+  hunters: {  // "Trailwarden's Pursuit" — mid-game (~ilvl 55), Highlands drops
+    id: 'hunters', name: "Trailwarden's Pursuit",
+    pieces: {
+      weapon:  { name: "Trailwarden's Edge",  stats: { dmg: 55, crit: 0.02 } },
+      armor:   { name: "Trailwarden's Hide",  stats: { hp: 200, speed: 0.04 } },
+      trinket: { name: "Trailwarden's Mark",  stats: { crit: 0.04, hp: 90 } },
+      relic:   { name: "Trailwarden's Totem", stats: { dmg: 33, hp: 180, crit: 0.02 } },
+    },
+    bonus2: { speed: 0.06 }, bonus4: { dmg: 40, crit: 0.03 },
+    flavor: 'Worn by those who ran down what the rest of us only feared.',
+  },
+  warden: {   // "Bulwark of the Long Watch" — defensive SUSTAIN set, NO DR
+    id: 'warden', name: 'Bulwark of the Long Watch',
+    pieces: {
+      weapon:  { name: 'Watchblade',   stats: { dmg: 50, hp: 60 } },
+      armor:   { name: 'Watchplate',   stats: { hp: 300, speed: 0.02 } },
+      trinket: { name: 'Watch-Sigil',  stats: { hp: 150, healPower: 0.04 } },
+      relic:   { name: 'Watchstone',   stats: { hp: 280, dmg: 25, healPower: 0.03 } },
+    },
+    bonus2: { hp: 200 }, bonus4: { healPower: 0.10, hp: 200 },
+    flavor: 'They held the door a long time. They would have held it longer.',
+  },
+  starbound: { // "Regalia of the Fallen Star" — endgame (~ilvl 100), Sanctum drops
+    id: 'starbound', name: 'Regalia of the Fallen Star',
+    pieces: {
+      weapon:  { name: 'Star-Splinter Blade', stats: { dmg: 120, crit: 0.03 } },
+      armor:   { name: 'Star-Splinter Mail',  stats: { hp: 520, speed: 0.03 } },
+      trinket: { name: 'Star-Splinter Eye',   stats: { crit: 0.06, healPower: 0.05, hp: 200 } },
+      relic:   { name: 'Star-Splinter Heart', stats: { dmg: 90, hp: 360, crit: 0.04 } },
+    },
+    bonus2: { crit: 0.05 }, bonus4: { dmg: 90, healPower: 0.06 },
+    flavor: 'Four shards of the same dead star, hungry to be whole.',
+  },
+  verdant: {  // "Vestments of the First Spring" — Hollow tier (~ilvl 116)
+    id: 'verdant', name: 'Vestments of the First Spring',
+    pieces: {
+      weapon:  { name: 'Springthorn Lash',  stats: { dmg: 150, crit: 0.03 } },
+      armor:   { name: 'Springbark Hide',   stats: { hp: 620, speed: 0.03 } },
+      trinket: { name: 'Springbloom Seed',  stats: { crit: 0.06, healPower: 0.06, hp: 240 } },
+      relic:   { name: 'Springroot Heart',  stats: { dmg: 110, hp: 420, crit: 0.04 } },
+    },
+    bonus2: { healPower: 0.06 }, bonus4: { dmg: 100, crit: 0.04 },
+    flavor: 'Cut from the season the world tried to grow back all at once.',
+  },
+};
+
+// bosses that should drop the Hollow-tier `verdant` set rather than `starbound`,
+// even though they live in EXPANSION_BOSSES (the Verdant Hollow bosses).
+const VERDANT_SET_BOSSES = new Set(['spireshade', 'vorthal']);
+
+// clone a SETS piece into a full inventory instance (fresh uid, tagged setId)
+export function makeSetPiece(setId, slot, ilvl) {
+  const s = SETS[setId];
+  if (!s) return null;
+  const piece = s.pieces[slot];
+  if (!piece) return null;
+  const item = {
+    uid: rollUid(), id: piece.name, name: piece.name, slot, rarity: 'epic',
+    stats: { ...piece.stats }, setId, unique: false, ilvl, value: 0,
+  };
+  item.value = valueOf(item);
+  return item;
+}
+
+// { setId: count } across equipped slots (integrator's tooltip + char-sheet)
+export function equippedSetCounts(equipped) {
+  const counts = {};
+  if (!equipped) return counts;
+  for (const slot of ALL_SLOTS) {
+    const it = equipped[slot];
+    if (it && it.setId) counts[it.setId] = (counts[it.setId] || 0) + 1;
+  }
+  return counts;
+}
+
 // ---------- drop tables (per PLAN tier rules) ----------
 // Returns an array of dropped item instances (0..2). Uses plain Math.random()
 // to match combat.js loot precedent — drops feel random per-kill.
@@ -312,36 +542,46 @@ export function rollDrops(enemy) {
   const drops = [];
 
   if (TRIAL_CRYPT_BOSSES.has(kind)) {
-    // trial/crypt boss: 1 guaranteed epic generated item + 22% unique
-    drops.push(makeGenerated(pick(SLOTS), 'epic', ilvl));
+    // trial/crypt boss: 1 guaranteed epic (or 18% a set piece instead) + 22% unique
+    if (Math.random() < 0.18) drops.push(makeSetPiece(pick(['hunters', 'warden']), pick(ALL_SLOTS), ilvl));
+    else drops.push(makeGenerated(pick(SLOTS), 'epic', ilvl));
     if (Math.random() < 0.22) {
       const u = makeUnique(kind);
       if (u) drops.push(u);
     }
+    if (Math.random() < 0.35) drops.push(makeMaterial('sealfragment', 1));
     return drops;
   }
 
   if (EXPANSION_BOSSES.has(kind)) {
-    // expansion boss: 1 guaranteed epic, slot relic-weighted, + 22% unique
-    // (mirror of the TRIAL_CRYPT_BOSSES branch; relic favored so the new slot
-    // fills out first)
-    drops.push(makeGenerated(weightedPick({ weapon: 20, armor: 20, trinket: 20, relic: 40 }), 'epic', ilvl));
+    // expansion boss: 1 guaranteed epic, slot relic-weighted (or 18% a set piece
+    // instead) + 22% unique. Hollow bosses (spireshade/vorthal, also in this set)
+    // give the Hollow-tier `verdant` set; Frostveil/Sanctum give `starbound`.
+    if (Math.random() < 0.18) {
+      const pool = VERDANT_SET_BOSSES.has(kind) ? ['verdant', 'warden'] : ['starbound', 'warden'];
+      drops.push(makeSetPiece(pick(pool), pick(ALL_SLOTS), ilvl));
+    } else {
+      drops.push(makeGenerated(weightedPick({ weapon: 20, armor: 20, trinket: 20, relic: 40 }), 'epic', ilvl));
+    }
     if (Math.random() < 0.22) {
       const u = makeUnique(kind);
       if (u) drops.push(u);
     }
+    if (Math.random() < 0.35) drops.push(makeMaterial('sealfragment', 1));
     return drops;
   }
 
   if (TIME_BOSSES.has(kind)) {
-    // The Last Hour boss: 1 guaranteed epic, slot relic-weighted, + 22% unique
-    // (mirror of the EXPANSION_BOSSES branch; Khronaxis' the_last_hour is the
-    // new relic BiS). ilvl = enemy.level (116/118/120).
-    drops.push(makeGenerated(weightedPick({ weapon: 20, armor: 20, trinket: 20, relic: 40 }), 'epic', ilvl));
+    // The Last Hour boss: 1 guaranteed epic, slot relic-weighted (or 18% a
+    // verdant/warden set piece instead) + 22% unique (Khronaxis' the_last_hour is
+    // the new relic BiS). ilvl = enemy.level (116/118/120).
+    if (Math.random() < 0.18) drops.push(makeSetPiece(pick(['verdant', 'warden']), pick(ALL_SLOTS), ilvl));
+    else drops.push(makeGenerated(weightedPick({ weapon: 20, armor: 20, trinket: 20, relic: 40 }), 'epic', ilvl));
     if (Math.random() < 0.22) {
       const u = makeUnique(kind);
       if (u) drops.push(u);
     }
+    if (Math.random() < 0.35) drops.push(makeMaterial('sealfragment', 1));
     return drops;
   }
 
@@ -372,6 +612,10 @@ export function rollDrops(enemy) {
     const u = makeUnique('glowcap_carbine');
     if (u) drops.push(u);
   }
+
+  // material: any trash mob has a 25% chance to drop 1 of its zone-band material
+  // (additive — a mob can drop BOTH a material and a gear piece below).
+  if (Math.random() < 0.25) drops.push(makeMaterial(zoneMatFor(ilvl), 1));
 
   // trash: 18% to drop a single low item. Expansion trash families roll the same
   // rarities, but their slot is the 4-way pick so the relic slot can drop here.

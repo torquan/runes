@@ -81,4 +81,11 @@ export const sfx = {
   // enrage (the hour runs out): a slow, swelling doom-klaxon — two detuned saws
   // grinding upward, the last clock that ever rings
   warnEnrage(){ tone(110, 'sawtooth', 0.04, 0.9, 0.55); tone(146, 'sawtooth', 0.06, 0.9, 0.45, 0, 0.04); tone(220, 'square', 0.5, 0.5, 0.4, 0, 0.5); },
+  // ---- Iteration C: crafting, smithing, control ----
+  // gather: a herb-snip and a small rising sparkle — the world giving you a little
+  gather()    { noiseBurst(0.04, 5000, 0.25); tone(660, 'sine', 0.005, 0.16, 0.3, 0, 0.02); tone(990, 'sine', 0.005, 0.22, 0.26, 0, 0.09); },
+  // craftDone: an anvil-ring satisfaction — a bright metallic ting over a warm confirm
+  craftDone() { tone(880, 'triangle', 0.004, 0.3, 0.4); tone(1320, 'sine', 0.004, 0.4, 0.3, 0, 0.05); tone(660, 'triangle', 0.01, 0.45, 0.28, 0, 0.05); },
+  // ccThud: a dull control-impact thud — they staggered, not a klaxon
+  ccThud()    { tone(90, 'square', 0.004, 0.14, 0.5); tone(130, 'sawtooth', 0.006, 0.1, 0.35); noiseBurst(0.06, 700, 0.4); },
 };

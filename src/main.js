@@ -6,6 +6,7 @@ import { buildFrostveil } from './frostveil.js';
 import { buildSanctum } from './sanctum.js';
 import { buildHollow } from './hollow.js';
 import { buildHorologium } from './horologium.js';
+import { buildGathering, gatherNode } from './gathering.js';
 import { heightAt, HIGHLANDS } from './noise.js';
 import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, spawnHollowNpc, spawnHorologiumNpc, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
 import { createPlayer, updatePlayer, CLASSES } from './player.js';
@@ -42,6 +43,7 @@ const frostveil = buildFrostveil(scene);
 const sanctum = buildSanctum(scene);
 const hollow = buildHollow(scene);
 const horologium = buildHorologium(scene);
+const gathering = buildGathering(scene);
 const enemies = spawnEnemies(scene);
 const npc = spawnNpc(scene);
 const gateNpc = spawnGateNpc(scene);
@@ -56,11 +58,21 @@ const madge = {
 };
 madge.group.position.copy(world.madgePos);
 madge.group.rotation.y = 0.9;
-scene.add(npc.group, gateNpc.group, odda.group, fenwick.group, greta.group, tamsin.group, madge.group);
+// Smith Halla — the bench. No chain (like Madge); F near her opens the craft panel.
+// Pioneer camp, opposite Barnaby(-2.5,-3) so the two questgivers don't crowd.
+const halla = {
+  name: 'Smith Halla',
+  group: buildHumanoid('smith'),
+  anim: { moving: false, speed: 1, attackT: -1, dead: false },
+  chain: null,
+};
+halla.group.position.set(2.5, heightAt(2.5, -3), -3);
+halla.group.rotation.y = -Math.PI / 4;
+scene.add(npc.group, gateNpc.group, odda.group, fenwick.group, greta.group, tamsin.group, madge.group, halla.group);
 
 const game = {
-  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, hollow, horologium, enemies,
-  npc, gateNpc, npcs: [npc, gateNpc, odda, fenwick, greta, tamsin, madge],
+  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, hollow, horologium, gathering, enemies,
+  npc, gateNpc, npcs: [npc, gateNpc, odda, fenwick, greta, tamsin, madge, halla],
   player: null,
   ui: createUi(),
   fx: createFx(scene),
@@ -196,6 +208,19 @@ function allPortals() {
   return list;
 }
 
+// nearest non-depleted gather node within 3.5u (F-gather + tick interact prompt)
+function nearestNode() {
+  if (!game.player) return null;
+  const pos = game.player.group.position;
+  let best = null, bestD = 3.5;
+  for (const n of game.gathering.nodes) {
+    if (n.depleted) continue;
+    const d = Math.hypot(pos.x - n.group.position.x, pos.z - n.group.position.z);
+    if (d < bestD) { best = n; bestD = d; }
+  }
+  return best;
+}
+
 function nearestPortal() {
   if (!game.player) return null;
   const pos = game.player.group.position;
@@ -214,6 +239,14 @@ const GATE_FLAVOR = {
   korgrim: 'Far to the north, the earth begins to tremble…',
   vexnar: 'A winged shadow crosses the eastern rim…',
   morgrath: 'Something pale stirs among the southwestern stones…',
+};
+
+// level-55 control-skill learn toasts (§C.4)
+const LEARN_TOAST = {
+  warrior: "You've learned Shield Bash. Some conversations end with a guard to the teeth.",
+  scout: "You've learned Hamstring Shot. Let them run. Slower.",
+  mage: "You've learned Frost Nova. Now they can watch.",
+  priest: "You've learned Word of Stillness. The old quiet has a name, and you can say it now.",
 };
 let gatesInitialized = false;
 function updateGates() {
@@ -261,6 +294,15 @@ const RIDDLES = [
   { q: 'Every hero in this valley has killed it a hundred times, and it has never once died.',
     options: ['A boar', 'Vargoth', 'Time'], answer: 0 },
 ];
+
+// Smith Halla's bench — log her introduction the first time, then open the panel.
+function openCraftBench() {
+  if (!game._metHalla) {
+    game._metHalla = true;
+    game.ui.log("Halla: \"Halla. I shoe boars and bend bad iron straight. Bring me what the world's lying around and I'll make it worth carrying.\"", 'log-quest');
+  }
+  game.ui.toggleCraft(game);
+}
 
 function openMadgeDialog() {
   const ui = game.ui;
@@ -437,6 +479,7 @@ game.save = () => {
     sanctumQuests: game.sanctumQuests.serialize(),
     hollowQuests: game.hollowQuests.serialize(),
     horologiumQuests: game.horologiumQuests.serialize(),
+    nodesDepleted: game.gathering.nodes.map((n) => (n.depleted ? Math.round(n.respawnT) : 0)),
   }));
 };
 
@@ -550,11 +593,13 @@ window.addEventListener('keydown', (e) => {
     else if (n === 0) castSkill(game, 9);           // 0 -> index 9
   }
   if (e.code === 'Minus') castSkill(game, 10);       // - -> 11th slot (3rd capstone)
+  if (e.code === 'Equal') castSkill(game, 11);       // = -> 12th slot (dual-class + new skill headroom)
   if (e.code === 'KeyR') useRune(game);
   if (e.code === 'KeyQ') game.player.usePotion(game);
   if (e.code === 'KeyI') game.ui.toggleInventory(game);
   if (e.code === 'KeyC') game.ui.toggleCharSheet(game);
   if (e.code === 'KeyT') game.ui.toggleTalents(game);
+  if (e.code === 'KeyB' && konamiIdx !== 9) game.ui.toggleCraft(game); // 9 = B just spoke as the old words' 9th syllable
   if (e.code === 'Space') { e.preventDefault(); game.player.tryJump(); }
   if (e.code === 'KeyF') {
     const p = game.player.group.position;
@@ -567,6 +612,10 @@ window.addEventListener('keydown', (e) => {
     }
     if (bestChain) {
       bestChain.openDialog(game);
+    } else if (p.distanceTo(halla.group.position) < 5) {
+      openCraftBench();
+    } else if (nearestNode()) {
+      gatherNode(game, nearestNode());
     } else if (p.distanceTo(madge.group.position) < 5) {
       openMadgeDialog();
     } else if (game.zone === 'crypt' && !game.player.secrets.vault &&
@@ -580,7 +629,8 @@ window.addEventListener('keydown', (e) => {
     }
   }
   if (e.code === 'Escape') {
-    if (game.ui.shopOpen()) game.ui.hideShop();
+    if (game.ui.craftOpen()) game.ui.hideCraft();
+    else if (game.ui.shopOpen()) game.ui.hideShop();
     else if (game.ui.inventoryOpen()) game.ui.hideInventory();
     else if (game.ui.talentOpen()) game.ui.hideTalents();
     else if (game.ui.charOpen()) game.ui.hideCharSheet();
@@ -647,6 +697,7 @@ document.getElementById('inv-tab-bag').addEventListener('click', () => { game.ui
 document.getElementById('inv-tab-sell').addEventListener('click', () => { game.ui._invTab = 'sell'; game.ui.renderInventory(game); });
 document.getElementById('player-frame').addEventListener('click', () => game.started && game.ui.toggleCharSheet(game));
 document.getElementById('char-close').addEventListener('click', () => game.ui.hideCharSheet());
+document.getElementById('craft-close').addEventListener('click', () => game.ui.hideCraft());
 document.getElementById('talent-badge').addEventListener('click', () => game.started && game.ui.toggleTalents(game));
 document.getElementById('talent-close').addEventListener('click', () => game.ui.hideTalents());
 document.getElementById('talent-respec').addEventListener('click', () => { game.ui.hideTalents(); game.ui.showShop(game); });
@@ -737,6 +788,10 @@ function startGame(classId, saved) {
     game.sanctumQuests.load(saved.sanctumQuests);
     game.hollowQuests.load(saved.hollowQuests);
     game.horologiumQuests.load(saved.horologiumQuests);   // no-ops on undefined (old saves / fresh dungeon)
+    const nd = saved.nodesDepleted;   // restore depleted gather nodes by index (skip if absent)
+    if (nd) game.gathering.nodes.forEach((n, i) => {
+      if (nd[i] > 0) { n.depleted = true; n.respawnT = nd[i]; n.group.visible = false; }
+    });
     game.slain = new Set(saved.slain ?? []);
     if (p.secrets.vault) dungeon.openChest();         // the hoard stays plundered
   }
@@ -777,6 +832,13 @@ function tick() {
   const elapsed = clock.elapsedTime;
 
   if (game.started) {
+    // level-55 crossing learns the class control skill (it joins the bar via
+    // allSkills()'s minLevel filter). One-shot rebuild — no learn-state stored.
+    if (game.player && game.player.level >= 55 && !game._learned55) {
+      game._learned55 = true;
+      game.ui.buildActionBar(game, game.onCast);
+      game.ui.log(LEARN_TOAST[game.player.classId] || 'You have learned a new skill — it joins your bar.', 'log-quest');
+    }
     updateGates();
     updatePlayer(game, dt, elapsed);
     updateEnemies(game, dt, elapsed);
@@ -787,6 +849,7 @@ function tick() {
     sanctum.update(elapsed);
     hollow.update(elapsed, game);
     horologium.update(elapsed);
+    gathering.update(dt);
 
     let npcDist = Infinity;
     for (const n of game.npcs) npcDist = Math.min(npcDist, updateNpc(n, game, elapsed));
@@ -800,6 +863,7 @@ function tick() {
     const nearPond = game.zone === 'world' && p.distanceTo(world.pondPos) < 4.5;
     const nearChest = game.zone === 'crypt' && !game.player.secrets.vault &&
       Math.hypot(p.x - dungeon.chestPos.x, p.z - dungeon.chestPos.z) < 4;
+    const nearNode = game.player.alive ? nearestNode() : null;
 
     if (game.player.alive && npcDist < 5 && !game.ui.dialogOpen()) {
       game.ui.setInteractPrompt(true, 'Talk');
@@ -813,6 +877,8 @@ function tick() {
       game.ui.setInteractPrompt(true, frostSign.label);
     } else if (hollowSign && !game.ui.dialogOpen()) {
       game.ui.setInteractPrompt(true, hollowSign.label);
+    } else if (nearNode && !game.ui.dialogOpen()) {
+      game.ui.setInteractPrompt(true, `Gather ${nearNode.type.name}`);
     } else if (portal && game.player.alive) {
       game.ui.setInteractPrompt(true, portal.label);
     } else {
