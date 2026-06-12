@@ -84,6 +84,12 @@
         <span class="rune-key">T</span>
       </div>
 
+      <!-- Konown badge (Bestiary & Achievements) -->
+      <div id="achieve-badge" title="Press K for Bestiary & Achievements">
+        <span class="achieve-glyph">❖</span>
+        <span class="rune-key">K</span>
+      </div>
+
       <!-- action bar -->
       <div id="action-bar-wrap">
         <div id="xp-bar"><div id="xp-fill"></div><span id="xp-text"></span></div>
@@ -178,6 +184,19 @@
         <div id="craft-mats"></div>
         <div id="craft-rows"></div>
         <div class="dialog-buttons"><button id="craft-close" class="btn-ornate btn-dim">Close</button></div>
+      </div>
+    </div>
+
+    <!-- Konown: Bestiary & Achievements (mirrors char-panel) -->
+    <div id="achievement-panel" class="hidden">
+      <div class="dialog-frame achieve-frame">
+        <div class="dialog-title">Konown</div>
+        <div class="inv-tabs">
+          <button id="achieve-tab-bestiary" class="btn-ornate inv-tab active">Bestiary</button>
+          <button id="achieve-tab-achievements" class="btn-ornate inv-tab btn-dim">Achievements</button>
+        </div>
+        <div id="achieve-body"></div>
+        <div class="dialog-buttons"><button id="achieve-close" class="btn-ornate btn-dim">Close</button></div>
       </div>
     </div>
 

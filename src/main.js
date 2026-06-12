@@ -16,6 +16,7 @@ import { createQuests, createHighlandQuests, createFrostveilQuests, createSanctu
 import { makeUnique, makeGenerated, rollUid } from './items.js';
 import { buildHumanoid } from './characters.js';
 import { createUi } from './ui.js';
+import { checkAchievements } from './achievements.js';
 import { initAudio, sfx } from './audio.js';
 
 const canvas = document.getElementById('game');
@@ -283,6 +284,7 @@ function openVault() {
   p.addItem(game, makeUnique('vargoth_vault'));
   game.ui.log("Vargoth's hoard: a king's gold, five runes, and a spare crown. He had spares. Of course he had spares.", 'log-loot-legendary');
   game.save();
+  checkAchievements(game);   // instant feedback (hoardfinder)
 }
 
 // --- Hermit Madge: three riddles, one pebble ---
@@ -348,6 +350,7 @@ function openMadgeDialog() {
             ui.log("Madge presses a perfectly ordinary pebble into your hand. (+5 runes, Madge's Lucky Pebble)", 'log-loot-legendary');
             game.fx.burst(p.group.position, 0xffd76e, 26);
             game.save();
+            checkAchievements(game);   // instant feedback (madge_six once riddles reach 6 in iter E; harmless now)
           } else {
             ui.log('Madge nods slowly, needles never stopping.', 'log-quest');
             openMadgeDialog();
@@ -387,6 +390,7 @@ function resolveCatch() {
     game.ui.floatText(p.group.position, carp.name, 'loot-legendary');
     game.fx.burst(p.group.position, 0xff9a30, 30);
     sfx.levelup();
+    checkAchievements(game);   // instant feedback (angler)
   } else if (roll < 0.4) {
     p.gainGold(game, 5 + Math.floor(Math.random() * 21));
   } else {
@@ -480,6 +484,9 @@ game.save = () => {
     hollowQuests: game.hollowQuests.serialize(),
     horologiumQuests: game.horologiumQuests.serialize(),
     nodesDepleted: game.gathering.nodes.map((n) => (n.depleted ? Math.round(n.respawnT) : 0)),
+    counters: p.counters,
+    achievements: p.achievements,
+    title: p.title, titles: p.titles,
   }));
 };
 
@@ -599,6 +606,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyI') game.ui.toggleInventory(game);
   if (e.code === 'KeyC') game.ui.toggleCharSheet(game);
   if (e.code === 'KeyT') game.ui.toggleTalents(game);
+  if (e.code === 'KeyK') game.ui.toggleAchievements(game); // K is collision-free (NOT in KONAMI) — no guard needed, unlike B
   if (e.code === 'KeyB' && konamiIdx !== 9) game.ui.toggleCraft(game); // 9 = B just spoke as the old words' 9th syllable
   if (e.code === 'Space') { e.preventDefault(); game.player.tryJump(); }
   if (e.code === 'KeyF') {
@@ -629,7 +637,8 @@ window.addEventListener('keydown', (e) => {
     }
   }
   if (e.code === 'Escape') {
-    if (game.ui.craftOpen()) game.ui.hideCraft();
+    if (game.ui.achievementsOpen()) game.ui.hideAchievements();
+    else if (game.ui.craftOpen()) game.ui.hideCraft();
     else if (game.ui.shopOpen()) game.ui.hideShop();
     else if (game.ui.inventoryOpen()) game.ui.hideInventory();
     else if (game.ui.talentOpen()) game.ui.hideTalents();
@@ -701,6 +710,8 @@ document.getElementById('craft-close').addEventListener('click', () => game.ui.h
 document.getElementById('talent-badge').addEventListener('click', () => game.started && game.ui.toggleTalents(game));
 document.getElementById('talent-close').addEventListener('click', () => game.ui.hideTalents());
 document.getElementById('talent-respec').addEventListener('click', () => { game.ui.hideTalents(); game.ui.showShop(game); });
+document.getElementById('achieve-close').addEventListener('click', () => game.ui.hideAchievements());
+document.getElementById('achieve-badge').addEventListener('click', () => game.started && game.ui.toggleAchievements(game));
 document.getElementById('respawn-btn').addEventListener('click', () => {
   setZone('world');
   game.player.respawn(game);
@@ -740,6 +751,12 @@ document.querySelectorAll('#class-select .class-card').forEach((card) => {
 
 function startGame(classId, saved) {
   game.player = createPlayer(classId, scene);
+  // createPlayer (player.js) lacks these iteration-D fields — guarantee them on
+  // BOTH the new-game and saved paths so the K panel never reads undefined.
+  game.player.counters ??= {};
+  game.player.achievements ??= {};
+  game.player.titles ??= [];
+  game.player.title ??= null;
 
   if (saved) {
     const p = game.player;
@@ -778,6 +795,11 @@ function startGame(classId, saved) {
     p.glow = saved.glow ?? false;
     p.secrets = saved.secrets ?? { vault: false, riddles: 0 };
     p.secrets.vault ??= false; p.secrets.riddles ??= 0;
+    // iteration D: achievements/bestiary/titles — default-fill on all prior versions
+    p.counters = saved.counters ?? {};
+    p.achievements = saved.achievements ?? {};
+    p.titles = saved.titles ?? [];
+    p.title = saved.title ?? null;
     if (saved.secondaryId) p.chooseSecondary(game, saved.secondaryId, true);
     p.recalcStats();
     p.hp = p.maxHp;
@@ -826,6 +848,7 @@ let titleAngle = 0;
 
 // --- main loop ---
 const clock = new THREE.Clock();
+let achieveCheckT = 0;   // ~1s throttle for the out-of-combat achievement catch-all
 function tick() {
   requestAnimationFrame(tick);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -840,6 +863,10 @@ function tick() {
       game.ui.log(LEARN_TOAST[game.player.classId] || 'You have learned a new skill — it joins your bar.', 'log-quest');
     }
     updateGates();
+    // out-of-combat achievement catch-all (~1/sec): level-up, swearMastery,
+    // quest turn-in, fishing/larder/riddle flags. combat.js handles in-combat.
+    achieveCheckT += dt;
+    if (achieveCheckT >= 1) { achieveCheckT = 0; checkAchievements(game); }
     updatePlayer(game, dt, elapsed);
     updateEnemies(game, dt, elapsed);
     updateCombat(game, dt);

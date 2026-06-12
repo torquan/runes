@@ -11,7 +11,7 @@ each iteration ends in a green `vite build` and a commit.
 | 2 | **A** — The Verdant Hollow zone (106–118): mobs, Greta's chain, Vorthal | ✅ done |
 | 3 | **B** — The Last Hour dungeon (116–120): 4 NEW mechanic kinds, cap → 120 | ✅ done |
 | 4 | **C** — Crafting/gathering + item sets + new class skills | ✅ done |
-| 5 | **D** — Achievements/Bestiary panel (K) + titles | pending |
+| 5 | **D** — Achievements/Bestiary panel (K) + titles | ✅ done |
 | 6 | **E** — Hidden layer: the Larder, treasure maps, mimics, Grim, riddles | pending |
 | 7 | Balance audit, smoke test, docs (README/PLAN) | pending |
 
@@ -141,3 +141,23 @@ parallel authors on disjoint new files → single integrator for hub files
 - Design note (accepted): elixirs have no drink cooldown → perpetual
   single-buff uptime is the steady state; the lever if ever needed is a
   drink cd, never DR.
+
+### Iteration 5 — D: Bestiary & Achievements + titles (2026-06-13) ✅
+
+- Workflow `iteration-d-achievements` (7 agents, ~480k tokens): planner →
+  2 parallel authors (logic / presentation) → integrator → verify loop.
+  Build green, zero blockers, smoke PASS on first verify round.
+- Shipped: `src/achievements.js` — 22 achievements ("Konown" panel on K,
+  mirrors char-sheet idiom), bestiary over per-kind kill `counters`
+  (37 entries, '???' masked until first kill), cosmetic titles worn on
+  the character sheet, unlock toast + badge nudge, throttled ~1s
+  `checkAchievements` tick + instant checks at vault/riddle/carp/kill
+  sites. Counters/achievements/title/titles persist in v5; default-fill
+  at the load seam keeps every older save and veteran helper crash-free.
+- Idempotent by design: re-load re-derives boss achievements from `slain`
+  without re-toasting; stripped pre-D saves self-heal.
+- Intentional interim state: 5 achievements (madge_six, bitten,
+  exterminator, settled, hoardfinder, cartographer cluster) reference
+  Iteration-E content and stay locked-but-safe until E ships next.
+- Orchestrator post-fix: K-badge 'has-news' glow now clears when the
+  panel opens (was permanent once lit).

@@ -696,3 +696,54 @@ body {
 .talent-swear { margin-top: 6px; padding: 6px 14px; font-size: 0.72rem; }
 #talent-badge.has-points { border-color: var(--bronze-hi);
   box-shadow: 0 0 14px 2px rgba(255,215,110,.55), inset 0 0 0 1px rgba(0,0,0,.8); }
+
+/* ---------- Konown badge (HUD; sits below the talent badge) ---------- */
+#achieve-badge {
+  position: absolute; right: 18px; bottom: 178px; padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px; cursor: pointer; pointer-events: auto;
+  background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.8), 0 4px 18px rgba(0,0,0,.6);
+}
+#achieve-badge:hover { border-color: var(--bronze-hi); }
+.achieve-glyph { font-size: 1.25rem; color: #9ec8ff; text-shadow: 0 0 10px rgba(158,200,255,.85); }
+#achieve-badge.has-news { border-color: var(--bronze-hi);
+  box-shadow: 0 0 14px 2px rgba(255,215,110,.5), inset 0 0 0 1px rgba(0,0,0,.8); }
+#achieve-badge.has-news .achieve-glyph { color: #ffd76e; text-shadow: 0 0 12px rgba(255,215,110,.95); }
+#achieve-badge.nudge { animation: talent-nudge 1.1s ease-in-out 3; }
+
+/* ---------- Konown panel (Bestiary & Achievements; mirrors char-panel) ---------- */
+#achievement-panel { position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(8,5,2,.45); backdrop-filter: blur(2px); z-index: 36; }
+.achieve-frame { width: 430px; }
+#achieve-body { max-height: 58vh; overflow-y: auto; padding-right: 4px; margin-top: 4px; }
+.achieve-tally { text-align: center; font-size: .78rem; font-style: italic; color: #9ecfdd; margin-bottom: 6px; }
+.bestiary-flavor { font-size: .72rem; color: #b8a98a; font-style: italic; }
+.achieve-count { font-variant-numeric: tabular-nums; color: var(--gold-text); }
+.char-row.achieve-done b { color: var(--gold-text); }
+.char-row.achieve-locked span { letter-spacing: .15em; }
+/* achievement rows */
+.achieve-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 8px;
+  border-bottom: 1px solid rgba(232,200,122,.12); }
+.achieve-glyph-state { font-size: 1.05rem; width: 1.4em; text-align: center; flex: none; }
+.achieve-item.achieve-done .achieve-glyph-state { color: #ffd76e; text-shadow: 0 0 8px rgba(255,215,110,.7); }
+.achieve-item.achieve-locked .achieve-glyph-state { filter: grayscale(1) brightness(.6); }
+.achieve-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.achieve-item b { font-family: 'Cinzel', serif; font-size: .82rem; }
+.achieve-item.achieve-done b { color: var(--gold-text); text-shadow: 0 1px 2px #000; }
+.achieve-item.achieve-locked b { color: #9a8c6a; }
+.achieve-text small { font-size: .72rem; color: #cfc2a0; }
+.achieve-item.achieve-locked small { color: #7a6a4a; }
+.achieve-reward { font-style: italic; color: #9ecfdd !important; }
+.achieve-item.achieve-locked .achieve-reward { color: #6a7a82 !important; }
+/* countable progress bar */
+.achieve-bar { position: relative; height: 10px; margin-top: 4px; background: #140d06;
+  border: 1px solid var(--bronze-lo); border-radius: 4px; overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.9); }
+.achieve-bar i { display: block; height: 100%; background: var(--bronze-hi); opacity: .7; transition: width .25s; }
+.achieve-bar span { position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: 'Cinzel', serif; font-size: .55rem; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
+/* title picker on the char sheet */
+.char-title-pick { background: var(--panel); color: var(--parchment); border: 1px solid var(--panel-edge);
+  border-radius: 4px; padding: 2px 6px; font-family: 'Alegreya', serif; font-size: .8rem; cursor: pointer; }
+.char-title-pick:hover { border-color: var(--bronze-hi); }

@@ -6,6 +6,7 @@ import { RARITY, rarityColor, statSummary, totalEquippedStats, ALL_SLOTS,
 import { BRANCHES, ranks, CAPSTONE_THRESHOLD, BRANCH_CAP, MASTERY_THRESHOLD,
          MASTERIES, CHOICE_NODES, choiceNodeFor, choiceOf, capstoneFor,
          spentTotal, TOTAL_RANKS } from './talents.js';
+import { ACHIEVEMENTS, BESTIARY, TITLE_NONE } from './achievements.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -294,7 +295,7 @@ export function createUi() {
     // ---------- identity (portrait + name, changes on dual-class) ----------
     refreshIdentity(game) {
       const p = game.player;
-      $('player-name').textContent = p.name;
+      $('player-name').textContent = p.title ? `${p.name} · ${p.title}` : p.name;
       $('player-class-icon').textContent = p.secondary
         ? `${p.cls.icon}${p.secondary.icon}`
         : p.cls.icon;
@@ -697,7 +698,7 @@ export function createUi() {
     renderCharSheet(game) {
       const p = game.player;
       $('char-icon').textContent = p.secondary ? `${p.cls.icon}${p.secondary.icon}` : p.cls.icon;
-      $('char-name').textContent = p.name;
+      $('char-name').textContent = p.title ? `${p.name} · ${p.title}` : p.name;
       $('char-sub').textContent = `Level ${p.level} · ${p.xp} / ${xpForLevel(p.level)} XP`;
 
       const pct = (v) => `${Math.round(v * 100)}%`;
@@ -759,9 +760,33 @@ export function createUi() {
         html += row('Starlight trail', `<button class="btn-ornate btn-mini" id="glow-toggle">${p.glowOff ? 'Off' : 'On'}</button>`);
       }
 
+      // Titles — cosmetic; earned via achievements. All option strings are
+      // developer-authored achievement rewards (HTML-safe per innerHTML policy).
+      html += `<div class="char-section">Titles</div>`;
+      const titles = p.titles || [];
+      if (!titles.length) {
+        html += `<div class="char-row"><span class="char-empty">no titles earned yet</span></div>`;
+      } else {
+        const opt = (val, label, sel) =>
+          `<option value="${val}"${sel ? ' selected' : ''}>${label}</option>`;
+        let sel = `<select id="char-title-pick" class="char-title-pick">`;
+        sel += opt(TITLE_NONE, '— none —', !p.title);
+        for (const t of titles) sel += opt(t, t, p.title === t);
+        sel += `</select>`;
+        html += row('Worn title', sel);
+      }
+
       $('char-rows').innerHTML = html;
       const gt = $('glow-toggle');
       if (gt) gt.addEventListener('click', () => { p.glowOff = !p.glowOff; this.renderCharSheet(game); });
+      const tp = $('char-title-pick');
+      if (tp) tp.addEventListener('change', () => {
+        const v = tp.value;
+        p.title = (v === TITLE_NONE) ? null : v;
+        game.save?.();
+        this.renderCharSheet(game);
+        this.refreshIdentity(game);
+      });
     },
 
     // ---------- talents ----------
@@ -784,6 +809,96 @@ export function createUi() {
     nudgeTalentBadge() {
       const badge = $('talent-badge');
       badge.classList.remove('nudge'); void badge.offsetHeight; badge.classList.add('nudge');
+    },
+
+    // ---------- Konown: Bestiary & Achievements (K; mirrors the char-sheet idiom) ----------
+    showAchievements(game) { this._achieveTab = this._achieveTab || 'bestiary'; this.renderAchievements(game); $('achievement-panel').classList.remove('hidden'); $('achieve-badge')?.classList.remove('has-news'); },
+    hideAchievements() { $('achievement-panel').classList.add('hidden'); },
+    achievementsOpen() { return !$('achievement-panel').classList.contains('hidden'); },
+    toggleAchievements(game) { this.achievementsOpen() ? this.hideAchievements() : this.showAchievements(game); },
+
+    // achievements.js pulses this on each fresh unlock; keep crash-safe (badge may be absent)
+    nudgeAchieveBadge(game) {
+      const b = $('achieve-badge');
+      if (!b) return;
+      b.classList.add('has-news');
+      b.classList.remove('nudge'); void b.offsetHeight; b.classList.add('nudge');
+    },
+
+    // All strings are developer-authored (ACHIEVEMENTS / BESTIARY data, fixed titles) —
+    // HTML-safe per the innerHTML policy; no user input flows here.
+    renderAchievements(game) {
+      const p = game.player;
+      const tab = this._achieveTab || 'bestiary';
+      // tab buttons reflect state (mirror the inv-tabs .active / .btn-dim pattern)
+      const tb = $('achieve-tab-bestiary'), ta = $('achieve-tab-achievements');
+      tb.classList.toggle('active', tab === 'bestiary'); tb.classList.toggle('btn-dim', tab !== 'bestiary');
+      ta.classList.toggle('active', tab === 'achievements'); ta.classList.toggle('btn-dim', tab !== 'achievements');
+      // wire tab switches once (idempotent: clear via dataset flag)
+      if (!this._achieveTabsWired) {
+        tb.addEventListener('click', () => { this._achieveTab = 'bestiary'; this.renderAchievements(game); });
+        ta.addEventListener('click', () => { this._achieveTab = 'achievements'; this.renderAchievements(game); });
+        this._achieveTabsWired = true;
+      }
+
+      const counters = p.counters || {};
+      let html = '';
+
+      if (tab === 'bestiary') {
+        // group by zone, preserving BESTIARY display order
+        const zones = [];
+        const byZone = new Map();
+        for (const e of BESTIARY) {
+          if (!byZone.has(e.zone)) { byZone.set(e.zone, []); zones.push(e.zone); }
+          byZone.get(e.zone).push(e);
+        }
+        let seen = 0, total = 0;
+        for (const z of zones) {
+          html += `<div class="char-section">${z}</div>`;
+          for (const e of byZone.get(z)) {
+            total++;
+            const n = counters[e.kind] || 0;
+            if (n > 0) {
+              seen++;
+              html += `<div class="char-row achieve-done"><span>${e.name}</span>` +
+                `<span><b class="achieve-count">slain: ${n}</b></span></div>` +
+                `<div class="char-row"><span class="bestiary-flavor">${e.flavor}</span></div>`;
+            } else {
+              html += `<div class="char-row achieve-locked"><span class="char-empty">??? </span>` +
+                `<span class="char-empty">—</span></div>`;
+            }
+          }
+        }
+        html = `<div class="achieve-tally">Catalogued ${seen} / ${total} creatures.</div>` + html;
+      } else {
+        const total = ACHIEVEMENTS.length;
+        let got = 0;
+        for (const a of ACHIEVEMENTS) if (p.achievements?.[a.id]) got++;
+        html += `<div class="achieve-tally">Earned ${got} / ${total} achievements.</div>`;
+        for (const a of ACHIEVEMENTS) {
+          const done = !!(p.achievements && p.achievements[a.id]);
+          const glyph = done ? '✓' : '🔒';
+          const reward = a.reward ? a.reward.replace(/^title:\s*/, '· title: ') : '—';
+          // progress bar for the countable thresholds (display only — state is from achievements[])
+          let bar = '';
+          if (!done) {
+            let cur = 0, max = 0;
+            if (a.id === 'the_pestilence') { cur = counters.boar || 0; max = 500; }
+            else if (a.id === 'exterminator') { cur = counters.mimic || 0; max = 10; }
+            if (max) {
+              const pct = Math.min(1, cur / max) * 100;
+              bar = `<div class="achieve-bar"><i style="width:${pct}%"></i><span>${Math.min(cur, max)} / ${max}</span></div>`;
+            }
+          }
+          html += `<div class="achieve-item ${done ? 'achieve-done' : 'achieve-locked'}">` +
+            `<span class="achieve-glyph-state">${glyph}</span>` +
+            `<div class="achieve-text"><b>${a.name}</b>` +
+            `<small>${a.desc}</small>` +
+            `<small class="achieve-reward">${reward}</small>${bar}</div></div>`;
+        }
+      }
+
+      $('achieve-body').innerHTML = html;
     },
 
     // all strings here are developer-authored (talents.js data) — HTML-safe

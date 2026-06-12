@@ -6,6 +6,7 @@ import { gcdValue, healRecvMult, choiceIs, critDmgBonus, autoInterval,
          stoneformReduction, BLOODSCENT_MULT, SPREE_MULT, AVENGER_MULT,
          CLEAVE_PCT, CLEAVE_RADIUS, HARVEST_PCT,
          PROSPECTOR_GOLD, PROSPECTOR_RUNE } from './talents.js';
+import { checkAchievements } from './achievements.js';
 
 // ---------- particle bursts ----------
 export function createFx(scene) {
@@ -158,6 +159,14 @@ function onKill(game, enemy) {
       game.slain.add(enemy.kind);
     }
   }
+  // Bestiary tally: every kill of every kind (trash included). Drives the
+  // bestiary "slain: N" rows and the counter-threshold achievements
+  // (first_blood / the_pestilence / bitten / exterminator). checkAchievements
+  // is idempotent + saves itself if it unlocks anything.
+  game.player.counters = game.player.counters || {};
+  game.player.counters[enemy.kind] = (game.player.counters[enemy.kind] || 0) + 1;
+  checkAchievements(game);
+
   // Killing Spree: the tempo loop — every kill rearms the buff
   if (choiceIs(game.player.talents, 'onslaught', 21, 'spree')) game.player.spreeT = 6;
 
