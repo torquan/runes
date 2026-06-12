@@ -5,12 +5,13 @@ import { buildHighlands } from './highlands.js';
 import { buildFrostveil } from './frostveil.js';
 import { buildSanctum } from './sanctum.js';
 import { buildHollow } from './hollow.js';
+import { buildHorologium } from './horologium.js';
 import { heightAt, HIGHLANDS } from './noise.js';
-import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, spawnHollowNpc, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
+import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, spawnHollowNpc, spawnHorologiumNpc, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
 import { createPlayer, updatePlayer, CLASSES } from './player.js';
 import { freshTalents, sanitizeTalents } from './talents.js';
 import { castSkill, updateCombat, clickTarget, tabTarget, useRune, createFx } from './combat.js';
-import { createQuests, createHighlandQuests, createFrostveilQuests, createSanctumQuests, createHollowQuests } from './quests.js';
+import { createQuests, createHighlandQuests, createFrostveilQuests, createSanctumQuests, createHollowQuests, createHorologiumQuests } from './quests.js';
 import { makeUnique, makeGenerated, rollUid } from './items.js';
 import { buildHumanoid } from './characters.js';
 import { createUi } from './ui.js';
@@ -40,11 +41,13 @@ const highlands = buildHighlands(scene);
 const frostveil = buildFrostveil(scene);
 const sanctum = buildSanctum(scene);
 const hollow = buildHollow(scene);
+const horologium = buildHorologium(scene);
 const enemies = spawnEnemies(scene);
 const npc = spawnNpc(scene);
 const gateNpc = spawnGateNpc(scene);
 const { odda, fenwick } = spawnExpansionNpcs(scene);
 const { greta } = spawnHollowNpc(scene);
+const { tamsin } = spawnHorologiumNpc(scene);
 // Hermit Madge — no chain, no marker; just a sock and three riddles
 const madge = {
   name: 'Hermit Madge',
@@ -53,11 +56,11 @@ const madge = {
 };
 madge.group.position.copy(world.madgePos);
 madge.group.rotation.y = 0.9;
-scene.add(npc.group, gateNpc.group, odda.group, fenwick.group, greta.group, madge.group);
+scene.add(npc.group, gateNpc.group, odda.group, fenwick.group, greta.group, tamsin.group, madge.group);
 
 const game = {
-  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, hollow, enemies,
-  npc, gateNpc, npcs: [npc, gateNpc, odda, fenwick, greta, madge],
+  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, hollow, horologium, enemies,
+  npc, gateNpc, npcs: [npc, gateNpc, odda, fenwick, greta, tamsin, madge],
   player: null,
   ui: createUi(),
   fx: createFx(scene),
@@ -66,6 +69,7 @@ const game = {
   frostveilQuests: createFrostveilQuests(),
   sanctumQuests: createSanctumQuests(),
   hollowQuests: createHollowQuests(),
+  horologiumQuests: createHorologiumQuests(),
   audio: sfx,
   input: { keys: new Set(), mouseForward: false },
   classes: CLASSES,
@@ -80,6 +84,7 @@ gateNpc.chain = game.highlandQuests;
 odda.chain = game.frostveilQuests;
 fenwick.chain = game.sanctumQuests;
 greta.chain = game.hollowQuests;
+tamsin.chain = game.horologiumQuests;
 
 // --- zone atmosphere: golden meadow vs crypt gloom vs ashen highlands ---
 function setZone(zone) {
@@ -132,6 +137,16 @@ function setZone(zone) {
     world.hemi.color.set(0x6fbf80);    // green-lit from below by the flora
     world.sunLight.intensity = 0.08;   // no sun reaches the Hollow
     world.sunLight.color.set(0xbfffd0);
+  } else if (zone === 'horologium') {
+    scene.fog.color.set(0x0a0e1c);     // cold-blue clockwork tomb under the world
+    scene.fog.near = 8;
+    scene.fog.far = 56;
+    scene.background.set(0x05070f);
+    world.sky.visible = false;         // a sealed vault; the brass-gold + cold-blue point lights carry it
+    world.hemi.intensity = 0.25;
+    world.hemi.color.set(0x9ab0c8);
+    world.sunLight.intensity = 0.1;
+    world.sunLight.color.set(0xcfe8ff);
   } else {
     scene.fog.color.set(0xc4d4e0);
     scene.fog.near = 60;
@@ -177,6 +192,7 @@ function allPortals() {
   if (game.frostveil) list.push(...game.frostveil.portals);
   if (game.sanctum) list.push(...game.sanctum.portals);
   if (game.hollow) list.push(...game.hollow.portals);
+  if (game.horologium) list.push(...game.horologium.portals);
   return list;
 }
 
@@ -420,6 +436,7 @@ game.save = () => {
     frostveilQuests: game.frostveilQuests.serialize(),
     sanctumQuests: game.sanctumQuests.serialize(),
     hollowQuests: game.hollowQuests.serialize(),
+    horologiumQuests: game.horologiumQuests.serialize(),
   }));
 };
 
@@ -455,6 +472,41 @@ window.__veteran2 = (classId = 'warrior') => {
       done('h_cinders', 6), done('h_packs', 8), done('h_emberlord', 1), done('h_pyraxis', 1),
     ]), bounty: { status: 'ready', progress: 0 } },
     // frostveil/sanctum/hollow chains intentionally absent -> fresh expansion
+  }));
+  location.reload();
+};
+
+// console helper: a level-118 post-Vorthal hero at the Hollow's dungeon mouth (v5 save).
+// Hollow chain done, the Last Hour gate open (level ≥ 112), but horologiumQuests
+// intentionally absent -> the descent is fresh (default-fills via .load(undefined)).
+window.__veteran3 = (classId = 'warrior') => {
+  if (!CLASSES[classId]) { console.warn('classes:', Object.keys(CLASSES).join(', ')); return; }
+  const done = (id, n) => [id, { status: 'done', progress: n }];
+  localStorage.setItem(SAVE_KEY, JSON.stringify({
+    v: 5, classId, secondaryId: null,
+    level: 118, xp: 0,
+    gold: 600000, runes: 60, runeBonus: 45,
+    potions: 40, trainDmg: 0, trainHp: 0, trainCrit: 0, boots: true,
+    mount: true, glow: true,
+    inventory: [],
+    equipped: { weapon: null, armor: null, trinket: null, relic: null },
+    talents: { onslaught: 0, bulwark: 0, pathfinder: 0, choices: {}, mastery: null },  // 90 ranks derive
+    secrets: { vault: false, riddles: 0 },
+    slain: ['boss', 'banditking', 'korgrim', 'vexnar', 'morgrath', 'ossus', 'vargoth',
+            'emberlord', 'pyraxis', 'hrimnir', 'seraphel', 'noctyra',
+            'thunderbristle', 'spireshade', 'vorthal'],
+    quests: { quests: Object.fromEntries([
+      done('boars', 6), done('wolves', 4), done('boss', 1), done('bandits', 6), done('banditking', 1),
+      done('korgrim', 1), done('vexnar', 1), done('morgrath', 1), done('ossus', 1), done('vargoth', 1),
+    ]), bounty: { status: 'ready', progress: 0 } },
+    highlandQuests: { quests: Object.fromEntries([
+      done('h_cinders', 6), done('h_packs', 8), done('h_emberlord', 1), done('h_pyraxis', 1),
+    ]), bounty: { status: 'ready', progress: 0 } },
+    hollowQuests: { quests: Object.fromEntries([
+      done('h_swarm', 8), done('h_stalkers', 8), done('h_callers', 6), done('h_wardens', 5),
+      done('h_spireshade', 1), done('h_proof', 10), done('h_vorthal', 1), done('h_coda', 6),
+    ]), bounty: { status: 'ready', progress: 0 } },
+    // horologiumQuests intentionally absent -> fresh descent
   }));
   location.reload();
 };
@@ -684,6 +736,7 @@ function startGame(classId, saved) {
     game.frostveilQuests.load(saved.frostveilQuests);
     game.sanctumQuests.load(saved.sanctumQuests);
     game.hollowQuests.load(saved.hollowQuests);
+    game.horologiumQuests.load(saved.horologiumQuests);   // no-ops on undefined (old saves / fresh dungeon)
     game.slain = new Set(saved.slain ?? []);
     if (p.secrets.vault) dungeon.openChest();         // the hoard stays plundered
   }
@@ -733,6 +786,7 @@ function tick() {
     frostveil.update(elapsed, game);
     sanctum.update(elapsed);
     hollow.update(elapsed, game);
+    horologium.update(elapsed);
 
     let npcDist = Infinity;
     for (const n of game.npcs) npcDist = Math.min(npcDist, updateNpc(n, game, elapsed));
@@ -784,6 +838,10 @@ function tick() {
     if (!game._hollowWoke && (game.slain.has('noctyra') || game.player.level >= 102)) {
       game._hollowWoke = true;
       game.ui.log('Where the Hollow Star fell, the Sanctum floor has cracked — green light, and the smell of something growing back.', 'log-quest');
+    }
+    if (!game._lastHourWoke && (game.slain.has('noctyra') || game.player.level >= 112)) {
+      game._lastHourWoke = true;
+      game.ui.log('At the edge of the Hollow, a second arch stops mid-collapse and holds. Below it, the sand has stopped falling.', 'log-quest');
     }
     if (!game._hintVault && game.zone === 'crypt' &&
         Math.hypot(p.x - dungeon.thronePos.x, p.z - dungeon.thronePos.z) < 4) {
@@ -845,6 +903,7 @@ function tick() {
     frostveil.update(elapsed, null);
     sanctum.update(elapsed);
     hollow.update(elapsed, null);
+    horologium.update(elapsed);
     const fakeGame = { player: { group: { position: camera.position } } };
     for (const n of game.npcs) updateNpc(n, fakeGame, elapsed);
   }

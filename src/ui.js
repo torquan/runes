@@ -145,6 +145,7 @@ export function createUi() {
         frostveil: 'The Frostveil',
         sanctum: 'The Starfall Sanctum',
         hollow: 'The Verdant Hollow',
+        horologium: 'The Last Hour',
       }[game.zone] || 'Howling Plains';
 
       // target frame
@@ -264,7 +265,7 @@ export function createUi() {
     // highland update never blanks Barnaby's tracked quests, and vice versa.
     refreshQuestTracker() {
       const game = window.__game;
-      const chains = [game.quests, game.highlandQuests, game.frostveilQuests, game.sanctumQuests, game.hollowQuests].filter(Boolean);
+      const chains = [game.quests, game.highlandQuests, game.frostveilQuests, game.sanctumQuests, game.hollowQuests, game.horologiumQuests].filter(Boolean);
       const wrap = $('quest-entries');
       wrap.innerHTML = '';
       const visible = [];
@@ -715,7 +716,7 @@ export function createUi() {
     // ---------- boss mechanic warning ----------
     mechWarning(kind) {
       const el = $('mech-warning');
-      el.textContent = { jump: 'JUMP!', move: 'MOVE!', in: 'GET IN!' }[kind] || 'MOVE!';
+      el.textContent = { jump: 'JUMP!', move: 'MOVE!', in: 'GET IN!', dodge: 'DODGE!', flee: 'RUN!', enrage: 'ENRAGE!' }[kind] || 'MOVE!';
       el.className = '';
       void el.offsetHeight; // restart the animation
       el.className = `mech-${kind}`;
@@ -758,7 +759,7 @@ export function createUi() {
       ctx.clip();
 
       // pocket zones sit outside the baked map image — solid zone tints
-      const pocketFill = { crypt: '#0c0a10', frostveil: '#16202e', sanctum: '#0a0816', hollow: '#0e1c10' }[game.zone];
+      const pocketFill = { crypt: '#0c0a10', frostveil: '#16202e', sanctum: '#0a0816', hollow: '#0e1c10', horologium: '#0c0e16' }[game.zone];
       if (pocketFill) {
         ctx.fillStyle = pocketFill;
         ctx.fillRect(0, 0, S, S);
@@ -824,6 +825,9 @@ function targetLabel(kind) {
     sporecaller: 'Sporecallers silenced', hollowstalker: 'Hollowstalkers grounded',
     bloomwarden: 'Bloomwardens laid to rest', swarmling: 'Mycelial Swarmlings culled',
     spireshade: 'Spireshade the Mother-Bloom slain', vorthal: 'Vorthal the First Root uprooted',
+    cogwraith: 'Cogwraiths returned', sandflayer: 'Sandflayers stilled',
+    quaranth: 'Quaranth, the Unwound stopped', echo: 'Echo of the First Minute silenced',
+    khronaxis: 'Khronaxis felled — the hour is yours',
     any: 'Creatures slain',
   }[kind] || kind;
 }

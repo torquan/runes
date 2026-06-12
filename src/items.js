@@ -127,6 +127,23 @@ export const UNIQUES = {
     flavor: 'The oldest thing in Taborea, and it answered to you. The garden remembers its gardener.',
   },
 
+  // ===== The Last Hour (Horologium) uniques =====
+  quaranth: {         // Pendulum Hall mini-boss, L116
+    id: 'unwound_mainspring', name: 'The Unwound Mainspring', slot: 'weapon', rarity: 'legendary', unique: true,
+    stats: { dmg: 198, crit: 0.025 },              // ~1.10× a 116 weapon
+    flavor: 'Still coiled to strike, a century after the clock stopped.',
+  },
+  echo: {             // Stilled Vault mini-boss, L118
+    id: 'second_that_never_came', name: 'The Second That Never Came', slot: 'trinket', rarity: 'legendary', unique: true,
+    stats: { crit: 0.08, healPower: 0.065, hp: 440 },
+    flavor: 'It is always about to happen. It never quite does. Useful, that.',
+  },
+  khronaxis: {        // the Heart, L120 capstone — the new BiS, a RELIC (Last-Seal class)
+    id: 'the_last_hour', name: 'The Last Hour', slot: 'relic', rarity: 'legendary', unique: true,
+    stats: { dmg: 138, hp: 560, crit: 0.06, healPower: 0.052 },  // power ≈ 412 ≈ 1.60×
+    flavor: 'You hold it now. The world keeps turning because you remember to let it.',
+  },
+
   // secret rewards (pseudo-kind keys; granted via makeUnique(key), never dropped):
   vargoth_vault: {
     id: 'vargoths_spare_crown', name: "Vargoth's Spare Crown", slot: 'trinket', rarity: 'legendary', unique: true,
@@ -168,6 +185,13 @@ const EXPANSION_KINDS = new Set([
   'sporecaller', 'hollowstalker', 'bloomwarden', 'swarmling',   // Verdant Hollow trash
 ]);
 const EXPANSION_BOSSES = new Set(['hrimnir', 'seraphel', 'noctyra', 'spireshade', 'vorthal']);
+
+// ---------- The Last Hour (Horologium) drop sets ----------
+// Same shape as the Frostveil/Sanctum/Hollow sets: TIME_KINDS trash can roll the
+// relic slot; TIME_BOSSES drop a guaranteed epic (relic-weighted) + a chance at
+// their named unique. Khronaxis carries the new BiS relic (the_last_hour).
+const TIME_BOSSES = new Set(['quaranth', 'echo', 'khronaxis']);
+const TIME_KINDS  = new Set(['cogwraith', 'sandflayer']);
 
 // ---------- small helpers ----------
 export function rollUid() {
@@ -309,6 +333,18 @@ export function rollDrops(enemy) {
     return drops;
   }
 
+  if (TIME_BOSSES.has(kind)) {
+    // The Last Hour boss: 1 guaranteed epic, slot relic-weighted, + 22% unique
+    // (mirror of the EXPANSION_BOSSES branch; Khronaxis' the_last_hour is the
+    // new relic BiS). ilvl = enemy.level (116/118/120).
+    drops.push(makeGenerated(weightedPick({ weapon: 20, armor: 20, trinket: 20, relic: 40 }), 'epic', ilvl));
+    if (Math.random() < 0.22) {
+      const u = makeUnique(kind);
+      if (u) drops.push(u);
+    }
+    return drops;
+  }
+
   if (kind === 'thunderbristle') {
     // meadow rare spawn: a normal elite roll (slot from the 4-way pick) PLUS a
     // guaranteed Gilded Tusk — the rarity is the spawn, not the roll.
@@ -341,7 +377,7 @@ export function rollDrops(enemy) {
   // rarities, but their slot is the 4-way pick so the relic slot can drop here.
   if (Math.random() < 0.18) {
     const rarity = weightedPick({ common: 60, uncommon: 32, rare: 8 });
-    const slot = EXPANSION_KINDS.has(kind)
+    const slot = (EXPANSION_KINDS.has(kind) || TIME_KINDS.has(kind))
       ? weightedPick({ weapon: 25, armor: 25, trinket: 25, relic: 25 })
       : pick(SLOTS);
     drops.push(makeGenerated(slot, rarity, ilvl));

@@ -71,4 +71,14 @@ export const sfx = {
   // sanctuary: rising two-tone sine — the inverse contour of warnMove, an
   // invitation (get IN) not a klaxon (get out)
   warnIn()    { tone(294, 'sine', 0.01, 0.14, 0.45); tone(440, 'sine', 0.01, 0.22, 0.45, 0, 0.13); },
+  // ---- The Last Hour: three new mechanic klaxons ----
+  // beam (DODGE the arc): a sawtooth winds up, a square clock-tick scythes after
+  warnSweep() { tone(330, 'sawtooth', 0.02, 0.5, 0.5); tone(660, 'square', 0.3, 0.2, 0.4, 0, 0.25); },
+  // tether (RUN to break it): a low sine drone with a sawtooth chain-rattle under
+  warnTether(){ tone(180, 'sine', 0.05, 0.6, 0.5); tone(120, 'sawtooth', 0.1, 0.5, 0.4, 0, 0.1); },
+  // shatterfloor (JUMP or find footing): a gritty noise-crack with a square thud
+  warnShatter(){ noiseBurst(0.4, 800, 0.6); tone(220, 'square', 0.02, 0.4, 0.4); },
+  // enrage (the hour runs out): a slow, swelling doom-klaxon — two detuned saws
+  // grinding upward, the last clock that ever rings
+  warnEnrage(){ tone(110, 'sawtooth', 0.04, 0.9, 0.55); tone(146, 'sawtooth', 0.06, 0.9, 0.45, 0, 0.04); tone(220, 'square', 0.5, 0.5, 0.4, 0, 0.5); },
 };

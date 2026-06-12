@@ -58,6 +58,10 @@ export const CLASSES = {
 // compresses — a full first clear lands in the mid-60s instead of 118.
 export function xpForLevel(level) { return Math.round(100 + 0.5 * Math.pow(level, 2.2)); }
 
+// The Last Hour raises the ceiling from 105 to 120 (Khronaxis is the new cap).
+// Talents are unaffected — the book's 90 ranks still close at level 99.
+export const LEVEL_CAP = 120;
+
 // Barnaby's wares — the gold sink. Training prices escalate forever.
 export const SHOP = [
   {
@@ -198,8 +202,10 @@ export function createPlayer(classId, scene) {
     // ---------- talents (derived, never stored as `spent`) ----------
     // total points spent across branches
     talentSpent() { return spentTotal(this.talents); },
-    // points available to spend right now (retroactive, derived)
-    talentPoints() { return Math.max(0, this.level - (TALENT_UNLOCK_LEVEL - 1) - this.talentSpent()); },
+    // points available to spend right now (retroactive, derived).
+    // The book closes at 99 (90 ranks), so cap the level term — levels 100→120
+    // grant power elsewhere but never phantom, unspendable talent points.
+    talentPoints() { return Math.max(0, Math.min(this.level, 99) - (TALENT_UNLOCK_LEVEL - 1) - this.talentSpent()); },
     // capstone actives currently unlocked (for the action bar)
     capstones() { return activeCapstones(this.talents); },
     // the full action-bar list: class skills (+secondary) then unlocked capstones
@@ -451,7 +457,7 @@ export function createPlayer(classId, scene) {
       this.xp += amount;
       game.ui.floatText(this.group.position, `+${amount} XP`, 'xp');
       game.ui.log(`You gain ${amount} experience.`, 'log-xp');
-      while (this.xp >= xpForLevel(this.level)) {
+      while (this.level < LEVEL_CAP && this.xp >= xpForLevel(this.level)) {
         this.xp -= xpForLevel(this.level);
         this.level++;
         this.recalcStats();
@@ -466,12 +472,14 @@ export function createPlayer(classId, scene) {
           game.ui.log('A second calling stirs within you…', 'log-quest');
           game.ui.showSecondaryChoice(game);
         }
-        // talent nudge: a new point is waiting
-        if (this.level >= TALENT_UNLOCK_LEVEL) {
+        // talent nudge: only when there's a real, spendable point waiting
+        // (talentPoints() caps the book at 99, so levels 100→120 stay quiet)
+        if (this.level >= TALENT_UNLOCK_LEVEL && this.talentPoints() > 0) {
           game.ui.log(`A talent point awaits — press T to spend it.`, 'log-quest');
           game.ui.nudgeTalentBadge();
         }
       }
+      if (this.level >= LEVEL_CAP) this.xp = 0;   // zero residual XP at the cap so the bar never overflows
       game.ui.refreshTalentBadge?.(game);
       game.save?.();
     },
@@ -569,7 +577,8 @@ export function updatePlayer(game, dt, elapsed) {
 
     // dungeon walls are solid (for you, at least)
     const walled = game.zone === 'crypt' ? game.dungeon
-      : game.zone === 'sanctum' ? game.sanctum : null;
+      : game.zone === 'sanctum' ? game.sanctum
+      : game.zone === 'horologium' ? game.horologium : null;
     if (walled) {
       const r = 0.55;
       for (const w of walled.walls) {

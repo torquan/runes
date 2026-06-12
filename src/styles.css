@@ -312,6 +312,18 @@ body {
   color: #fff2c0; text-shadow: 0 0 30px rgba(255, 240, 180, .9), 0 3px 6px #000;
   animation: mech-flash 1.6s ease-out;
 }
+#mech-warning.mech-dodge {
+  color: #ff4d6d; text-shadow: 0 0 30px rgba(255, 77, 109, .9), 0 3px 6px #000;
+  animation: mech-flash 1.5s ease-out;
+}
+#mech-warning.mech-flee {
+  color: #b06bff; text-shadow: 0 0 30px rgba(176, 107, 255, .9), 0 3px 6px #000;
+  animation: mech-flash 1.5s ease-out;
+}
+#mech-warning.mech-enrage {
+  color: #ff2a2a; text-shadow: 0 0 40px rgba(255, 42, 42, 1), 0 3px 6px #000;
+  animation: mech-flash 2s ease-out;
+}
 @keyframes mech-flash {
   0% { opacity: 0; transform: translateX(-50%) scale(0.4); }
   12% { opacity: 1; transform: translateX(-50%) scale(1.2); }

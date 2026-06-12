@@ -37,6 +37,10 @@ export const CLASS_STYLES = {
   // ---- the Verdant Hollow ----
   bloomwarden:{ tunic: 0x2f5a2a, trim: 0xff5ea8, weapon: 'none', skin: 0x6e8a4a },  // the Hollow grew through a person
   greta:      { tunic: 0x3a5a2e, trim: 0xff5ea8, weapon: 'none' },                   // Greta Thornby, botanist-in-exile
+  // ---- The Last Hour (the Horologium) ----
+  cogwraith:  { tunic: 0x14161f, trim: 0x8a6a2a, weapon: 'staff', skin: 0x6a6a72 },  // basalt revenant, brass-veined
+  khronaxis:  { tunic: 0x1a1d2e, trim: 0x8a6a2a, weapon: 'staff', skin: 0x4a4a5a },  // the kept hour, brass-haloed
+  tamsin:     { tunic: 0x2e3a4a, trim: 0x8a6a2a, weapon: 'none' },                   // time-broken survivor (questgiver NPC)
 };
 
 export function buildHumanoid(style) {
@@ -167,8 +171,9 @@ export function buildWolf(palette) {
   const g = new THREE.Group();
   const frost = palette === 'frost';
   const verdant = palette === 'verdant';
-  const fur = lambert(verdant ? 0x4a6e3a : frost ? 0xdfe9f5 : 0x5e6470);
-  const dark = lambert(verdant ? 0x2e4a24 : frost ? 0x9fb6c8 : 0x3a3e48);
+  const sand = palette === 'sand';   // desiccated dust-hound of the Horologium
+  const fur = lambert(verdant ? 0x4a6e3a : frost ? 0xdfe9f5 : sand ? 0xc2a878 : 0x5e6470);
+  const dark = lambert(verdant ? 0x2e4a24 : frost ? 0x9fb6c8 : sand ? 0x8a7048 : 0x3a3e48);
 
   const body = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 0.42), fur));
   body.position.y = 0.62;
@@ -186,9 +191,9 @@ export function buildWolf(palette) {
   const earR = earL.clone();
   earR.position.z = -0.1;
   headPivot.add(head, muzzle, earL, earR);
-  if (frost || verdant) {
+  if (frost || verdant || sand) {
     const eyeGeo = new THREE.BoxGeometry(0.06, 0.06, 0.05);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: frost ? 0x9fe8ff : 0xff5ea8 });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: frost ? 0x9fe8ff : sand ? 0xffb84a : 0xff5ea8 });
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
     eyeL.position.set(0.3, 0.04, 0.12);
     const eyeR = eyeL.clone();
@@ -517,6 +522,22 @@ export function animateSerpent(group, state, elapsed) {
     r.headPivot.position.x = 0.55;
     r.hood.scale.z = 1;
   }
+}
+
+// Three slow gear-haloes wreathing Khronaxis' head — clones the sanctum orrery
+// torus pattern as static attached decor. Brass wireframe rings at staggered
+// radii/tilts, parented above the head (group-local; the rig scale carries them).
+export function attachGearHaloes(group) {
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x8a6a2a, wireframe: true });
+  const haloes = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.9 - i * 0.22, 0.08, 6, 28), ringMat);
+    ring.rotation.set(i * 0.7 + 0.4, i * 1.1, i * 0.4);
+    haloes.add(ring);
+  }
+  haloes.position.y = 2.1;   // above the 1.9-tall humanoid head (group-local, pre-scale)
+  group.add(haloes);
+  return group;
 }
 
 export function applyDeathPose(group) {

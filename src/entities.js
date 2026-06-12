@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { heightAt, HIGHLANDS } from './noise.js';
-import { buildBoar, buildWolf, buildHumanoid, buildDragon, buildSerpent, buildSporeling, animateBeast, animateHumanoid, animateSerpent, animateSporeling } from './characters.js';
+import { buildBoar, buildWolf, buildHumanoid, buildDragon, buildSerpent, buildSporeling, attachGearHaloes, animateBeast, animateHumanoid, animateSerpent, animateSporeling } from './characters.js';
 import { choiceIs } from './talents.js';
 
 // Avenger's Pact: a clean telegraph dodge arms an 8s damage window
@@ -382,6 +382,90 @@ const ENEMY_TYPES = {
     ],
     summons: { at: [0.75, 0.5, 0.25], kind: 'hollowstalker', count: 3 },
   },
+
+  // ===== The Last Hour / the Horologium (level 116–120) =====
+  cogwraith: {
+    // dungeon trash (humanoid): pack-discounted hit 0.62×680≈420, hp 13s×908.6≈11800.
+    // tight rooms → small aggroRadius 8 + wanderR 1.5 (LOS-less aggro).
+    name: 'Cogwraith', level: 116, hp: 11800, dmgMin: 374, dmgMax: 467, xp: 2625,
+    speed: 5.6, aggroRadius: 8, attackRange: 2.4, gold: [220, 400], respawn: 600,
+    leash: 32, wanderR: 1.5, humanoid: true,
+    build: () => buildHumanoid('cogwraith'),
+  },
+  sandflayer: {
+    // fast 2-packs (beast): hit 0.69×686≈473, hp 8s×916.3≈7300. open corridors.
+    name: 'Sandflayer', level: 117, hp: 7300, dmgMin: 426, dmgMax: 521, xp: 2670,
+    speed: 7.6, aggroRadius: 13, attackRange: 2.0, gold: [180, 320], respawn: 600,
+    leash: 30, wanderR: 3,
+    build: () => buildWolf('sand'),               // wolf rig + NEW desiccated palette
+  },
+  quaranth: {
+    // MINI-BOSS 1 (L116, elite): a stalled clockwork colossus. beam + zone.
+    // Sustain 0.08×4720=378/s; hp 50s×908.6≈45000. armor 78 ≈ 19% of 413.
+    name: 'Quaranth, the Unwound', level: 116, hp: 45000, dmgMin: 749, dmgMax: 915, xp: 7000,
+    speed: 4.2, aggroRadius: 15, attackRange: 4.0, gold: [9000, 13000],
+    respawn: 240, leash: 90, wanderR: 2, armor: 78,
+    build: () => { const g = buildHumanoid('golem'); g.scale.setScalar(2.2); return g; },
+    humanoid: true, elite: true,
+    mechanics: [
+      { kind: 'beam', interval: 9, telegraph: 2.2, length: 22, halfArc: 0.34, sweep: 2.4, radius: 22, dmg: 1888,
+        center: 'boss', avoid: 'dodge', color: 0xff4d6d,
+        warn: 'swings the great pendulum-arm — DODGE the arc!', dodgeMsg: 'The arm scythes past your heels.' },
+      { kind: 'zone', interval: 8, telegraph: 1.5, radius: 6, dmg: 1841,
+        center: 'player', avoid: 'move', color: 0xb06bff,
+        warn: 'drops a stopped second on you — MOVE!', dodgeMsg: 'The frozen second cracks empty floor.' },
+    ],
+    summons: { at: [0.5], kind: 'cogwraith', count: 2 },
+  },
+  echo: {
+    // MINI-BOSS 2 (L118, elite): a time-revenant fighting a half-second ahead.
+    // tether + soak + slam. Sustain 0.08×4800=384/s; hp 55s×924≈50800. armor 80 ≈ 19% of 420.
+    name: 'Echo of the First Minute', level: 118, hp: 50800, dmgMin: 760, dmgMax: 930, xp: 7120,
+    speed: 4.4, aggroRadius: 15, attackRange: 4.0, gold: [11000, 16000],
+    respawn: 240, leash: 90, wanderR: 2, armor: 80,
+    build: () => { const g = buildHumanoid('wraith'); g.scale.setScalar(2.0); return g; },
+    humanoid: true, elite: true,
+    mechanics: [
+      { kind: 'tether', interval: 10, telegraph: 2.4, breakDist: 10, radius: 10, pullBack: true, dmg: 1920,
+        center: 'player', avoid: 'flee', color: 0xb06bff,
+        warn: 'chains you to the minute you just left — RUN to break it!', dodgeMsg: 'The chain snaps and the past lets go.' },
+      { kind: 'soak', interval: 11, telegraph: 2.0, radius: 3, dmg: 1824, unsoakedDmg: 4378,
+        center: 'player', avoid: 'in', color: 0x4dd0ff,
+        warn: 'gathers a falling weight — SOAK it or it falls on everything!', dodgeMsg: 'You take the weight square; better than the alternative.' },
+      { kind: 'slam', interval: 9, telegraph: 1.5, radius: 9, dmg: 1968,
+        center: 'boss', avoid: 'jump', color: 0xffd87a,
+        warn: 'collapses the moment around it — JUMP!', dodgeMsg: 'You leap the imploding instant.' },
+    ],
+    summons: { at: [0.6, 0.3], kind: 'sandflayer', count: 2 },
+  },
+  khronaxis: {
+    // CAPSTONE (level 120, RAISES CAP): all four new kinds + slam + the only enrage
+    // timer in the game. Sustain 0.08×4880=390.4/s; hp 200s×939.4≈188000. armor 82 ≈ 19% of 427.
+    name: 'Khronaxis, the Hour That Was Kept', level: 120, hp: 188000, dmgMin: 773, dmgMax: 945, xp: 11460,
+    speed: 4.6, aggroRadius: 16, attackRange: 4.0, gold: [30000, 45000],
+    respawn: 600, leash: 90, wanderR: 2, armor: 82,
+    build: () => { const g = buildHumanoid('khronaxis'); g.scale.setScalar(2.6); attachGearHaloes(g); return g; },
+    humanoid: true, elite: true,
+    enrageAt: 200, enrageMult: 1.6,
+    mechanics: [
+      { kind: 'shatterfloor', interval: 13, telegraph: 2.0, tile: 4, parity: 'auto', radius: 18, dmg: 2098,
+        center: 'boss', avoid: 'jump', color: 0xff8a3a,
+        warn: 'the floor remembers it was never solid — JUMP or find footing!', dodgeMsg: 'You ride the gap as the tiles drop away.' },
+      { kind: 'beam', interval: 9, telegraph: 2.2, length: 24, halfArc: 0.36, sweep: 2.6, radius: 24, dmg: 2147,
+        center: 'boss', avoid: 'dodge', color: 0xff4d6d,
+        warn: 'sweeps the hand of the great clock — DODGE!', dodgeMsg: 'The clock-hand scythes past you.' },
+      { kind: 'tether', interval: 11, telegraph: 2.4, breakDist: 10, radius: 10, pullBack: true, dmg: 2196,
+        center: 'player', avoid: 'flee', color: 0xb06bff,
+        warn: 'binds you to a kept minute — RUN!', dodgeMsg: 'You outrun your own past.' },
+      { kind: 'soak', interval: 12, telegraph: 2.0, radius: 3, dmg: 2098, unsoakedDmg: 5035,
+        center: 'player', avoid: 'in', color: 0x4dd0ff,
+        warn: 'lets a held hour fall — SOAK it!', dodgeMsg: 'You shoulder the hour.' },
+      { kind: 'slam', interval: 10, telegraph: 1.5, radius: 10, dmg: 2050,
+        center: 'boss', avoid: 'jump', color: 0xffd87a,
+        warn: 'lets the weight of time return — JUMP!', dodgeMsg: 'You leap the gravity of years.' },
+    ],
+    summons: { at: [0.75, 0.5, 0.25], kind: 'cogwraith', count: 2 },
+  },
 };
 
 export const TRIAL_SITES = {
@@ -398,6 +482,20 @@ export const HIGHLANDS_SITES = {
 export const FROSTVEIL_SITES = { hrimnir: { x: -345, z: 32 } };
 
 export const HOLLOW_SITES = { vorthal: { x: 0, z: -345 }, spireshade: { x: -30, z: -300 } };
+
+// Boss-room centers in the Horologium — MUST match the shell's arena-room walls.
+// DEVIATION FROM CONTRACT (loud): the contract pinned x=0, but the shell
+// (horologium.js, already written) builds the whole dungeon CENTERED ON x≈305
+// (the pocket is x250..360, like CRYPT in the same band — x=0 is OUTSIDE it and
+// would land on world terrain, not the y60 floor). horologium.js lines 8-21
+// explicitly supersede the x=0 coords with the centerline x=305 (CX). Engine
+// follows the shell's real geometry: quaranth (305,245), echo (305,278),
+// khronaxis (305,303); arrival/exit at (305,210).
+export const HOROLOGIUM_SITES = {
+  quaranth: { x: 305, z: 245 },
+  echo: { x: 305, z: 278 },
+  khronaxis: { x: 305, z: 303 },
+};
 
 function makeRng(seed) {
   let s = seed >>> 0;
@@ -427,6 +525,9 @@ function makeEnemy(kind, x, z) {
     baseRotZ: 0,
     temporary: !!t.temporary,
     mechTimer: 4, summonAt: t.summons ? [...t.summons.at] : null, minions: [],
+    combatT: 0,                 // accumulates while engaged; drives Khronaxis' enrage
+    _shatterCount: 0,           // per-enemy shatterfloor parity counter ('auto')
+    _enraged: false,            // latches the one-time enrage announce
   };
 }
 
@@ -589,6 +690,38 @@ export function spawnEnemies(scene) {
   enemies.push(spireshadeE, vorthal);
   scene.add(spireshadeE.group, vorthal.group);
 
+  // ---- The Last Hour / the Horologium: Cogwraith/Sandflayer packs + 3 bosses ----
+  // Entry portal gated (needs noctyra-slain or L112) so eager spawning is safe.
+  // Dungeon trash respawn 600 (cleared rooms stay cleared), bosses leash 90.
+  // The shell builds the dungeon CENTERED ON x≈305 (CX) — see HOROLOGIUM_SITES
+  // note. All coords below sit on the centerline ±a few u, ≥4u off the shell's
+  // wall AABBs (horologium.js WALLS), with small aggroRadius (cogwraith 8) so the
+  // LOS-less aggro can't chain-pull through walls. Doors are the x∈[303,307] lane.
+  const HCX = 305;
+  const horologiumSpawns = [
+    // Entry Antechamber (x294..316, z204..222): 2 Cogwraiths, off-wall, clear of
+    // the arrival swirl at (305,210) and the door gap at z221
+    ['cogwraith', HCX - 4, 221], ['cogwraith', HCX + 4, 221],
+    // Corridor A (x302..308, z222..234): 3 Cogwraiths down the middle
+    ['cogwraith', HCX, 225], ['cogwraith', HCX - 1.5, 229], ['cogwraith', HCX + 1.5, 232],
+    // Pendulum Hall gate (just inside the south door, south of Quaranth @z245): 1 Sandflayer
+    ['sandflayer', HCX, 239],
+    // Corridor B (x302..308, z258..270): 2+2 Sandflayers (the sand rains heavier)
+    ['sandflayer', HCX - 1.5, 261], ['sandflayer', HCX + 1.5, 263],
+    ['sandflayer', HCX - 1.5, 267], ['sandflayer', HCX + 1.5, 269],
+    // Final Corridor: NO trash (clean run to Khronaxis)
+  ];
+  for (const [kind, x, z] of horologiumSpawns) {
+    const e = makeEnemy(kind, x, z);
+    enemies.push(e);
+    scene.add(e.group);
+  }
+  const quaranth = makeEnemy('quaranth', HOROLOGIUM_SITES.quaranth.x, HOROLOGIUM_SITES.quaranth.z);
+  const echo = makeEnemy('echo', HOROLOGIUM_SITES.echo.x, HOROLOGIUM_SITES.echo.z);
+  const khronaxis = makeEnemy('khronaxis', HOROLOGIUM_SITES.khronaxis.x, HOROLOGIUM_SITES.khronaxis.z);
+  enemies.push(quaranth, echo, khronaxis);
+  scene.add(quaranth.group, echo.group, khronaxis.group);
+
   // ---- meadow rare spawn: Thunderbristle, in the level-1 boar ring (secret) ----
   // Nudge ±3u off any high ground, mirroring the boar-scatter heightAt>8 rule.
   let tbX = 44, tbZ = 31;
@@ -718,6 +851,23 @@ export function spawnHollowNpc(scene) {
   };
 }
 
+// Tamsin Verge, the time-broken survivor, runs the Horologium descent chain.
+// She stands at the Hollow's deepest signpost (the spiral's center, 0,−332),
+// which is the dungeon mouth. Same factory shape as the rest; the integrator
+// attaches her .chain and pushes her into game.npcs (mirrors greta).
+export function spawnHorologiumNpc(scene) {
+  const tamsin = buildHumanoid('tamsin');
+  placeOnGround(tamsin, 0, -332);
+  tamsin.castShadow = true;
+  return {
+    tamsin: {
+      name: 'Tamsin Verge',
+      group: tamsin,
+      anim: { moving: false, speed: 1, attackT: -1, dead: false },
+    },
+  };
+}
+
 const v1 = new THREE.Vector3();
 
 // ---- enemy projectiles (Cinder Wraith etc.) ----
@@ -812,11 +962,46 @@ function updateFirePatches(game, dt) {
 // ---- telegraphed boss mechanics ----
 const telegraphs = [];
 
+// wrap an angle into [-PI, PI)
+function wrapPi(a) {
+  return ((a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+}
+
+// the live enrage multiplier for a boss instance (Khronaxis only): 1× until its
+// combat timer crosses enrageAt, then enrageMult. Threads through every damage path.
+function enrageMul(e) {
+  return (e.type.enrageAt && e.combatT >= e.type.enrageAt) ? e.type.enrageMult : 1;
+}
+
+// tear down a telegraph's meshes (ring + fill + every per-kind extra). Used both
+// on normal resolve and on the abort paths (boss death / leash mid-cast).
+function disposeTelegraph(game, tg) {
+  for (const m of [tg.ring, tg.fill, ...tg.extra]) {
+    game.scene.remove(m);
+    m.geometry.dispose();
+    m.material.dispose();
+  }
+}
+
+// cancel every in-flight telegraph cast by enemy `e` WITHOUT resolving it — no
+// damage, no dodge credit. Called when its source dies or leashes mid-cast so a
+// beam/tether/soak/shatterfloor wedge can't keep tracking the player and then
+// fire (possibly enraged) up to `telegraph` seconds after the fight has ended.
+export function cancelTelegraphsFor(game, e) {
+  for (let i = telegraphs.length - 1; i >= 0; i--) {
+    if (telegraphs[i].source !== e) continue;
+    disposeTelegraph(game, telegraphs[i]);
+    telegraphs.splice(i, 1);
+  }
+}
+
 function castMechanic(game, e, mech) {
   const c = mech.center === 'boss' ? e.group.position : game.player.group.position;
   const x = c.x, z = c.z;
   const y = heightAt(x, z) + 0.07;
-  const matOpts = { color: mech.color, transparent: true, side: THREE.DoubleSide, depthWrite: false };
+  const enraged = enrageMul(e) > 1;
+  const col = enraged ? 0xff2a2a : mech.color;       // when enraged, tint every telegraph red
+  const matOpts = { color: col, transparent: true, side: THREE.DoubleSide, depthWrite: false };
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(mech.radius - 0.3, mech.radius, 40),
     new THREE.MeshBasicMaterial({ ...matOpts, opacity: 0.9 })
@@ -831,36 +1016,195 @@ function castMechanic(game, e, mech) {
     game.scene.add(m);
   }
   fill.scale.setScalar(0.01);
-  telegraphs.push({ x, z, mech, t: 0, ring, fill, source: e });
+  const tg = { x, z, mech, t: 0, ring, fill, source: e, extra: [] };
+
+  // ---- per-kind geometry: beam wedge, tether anchor+chain, shatterfloor tiles ----
+  if (mech.kind === 'beam') {
+    // a flat angular wedge aimed where the player stood, sweeping over telegraph.
+    // angle0: direction from boss to player (atan2(dx,dz), the +Z facing formula).
+    tg.angle0 = Math.atan2(game.player.group.position.x - x, game.player.group.position.z - z);
+    const wedge = new THREE.Mesh(
+      // CircleGeometry(radius, segs, thetaStart, thetaLength) — half-arc each side of 0
+      new THREE.CircleGeometry(mech.length, 24, -mech.halfArc, mech.halfArc * 2),
+      new THREE.MeshBasicMaterial({ ...matOpts, opacity: 0.32 })
+    );
+    wedge.rotation.x = -Math.PI / 2;            // lay flat
+    wedge.position.set(x, y, z);
+    game.scene.add(wedge);
+    tg.wedge = wedge;
+    tg.extra.push(wedge);
+  } else if (mech.kind === 'tether') {
+    // the ring is drawn at breakDist (mech.radius). Snapshot the anchor (it does
+    // NOT follow). Build a thin chain line anchor->player, updated each frame.
+    tg.anchor = { x, z };
+    const chain = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 0.12, 0.12),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, depthWrite: false })
+    );
+    game.scene.add(chain);
+    tg.chain = chain;
+    tg.extra.push(chain);
+  } else if (mech.kind === 'shatterfloor') {
+    // a checker grid of translucent tiles over (2·radius)² centered on the boss;
+    // only the tiles matching this cast's parity bit fall.
+    const pb = (mech.parity === 'auto') ? (e._shatterCount++ % 2) : (mech.parity === 'odd' ? 1 : 0);
+    const ox = x - mech.radius, oz = z - mech.radius;     // grid origin (SW corner)
+    tg.ox = ox; tg.oz = oz; tg.tile = mech.tile; tg.parityBit = pb;
+    tg.tiles = [];
+    const n = Math.floor((mech.radius * 2) / mech.tile);
+    const tileMat = new THREE.MeshBasicMaterial({ ...matOpts, opacity: 0.28 });
+    for (let ix = 0; ix < n; ix++) {
+      for (let iz = 0; iz < n; iz++) {
+        if (((ix + iz) & 1) !== pb) continue;             // only the falling parity
+        const t = new THREE.Mesh(new THREE.PlaneGeometry(mech.tile * 0.92, mech.tile * 0.92), tileMat);
+        t.rotation.x = -Math.PI / 2;
+        t.position.set(ox + ix * mech.tile + mech.tile / 2, y, oz + iz * mech.tile + mech.tile / 2);
+        game.scene.add(t);
+        tg.tiles.push(t);
+        tg.extra.push(t);
+      }
+    }
+  }
+
+  telegraphs.push(tg);
   game.ui.log(`${e.name} ${mech.warn}`, 'log-in');
   game.ui.mechWarning(mech.avoid);
-  if (mech.avoid === 'jump') game.audio.warnJump();
-  else if (mech.avoid === 'in') game.audio.warnIn();   // inverted "sanctuary" telegraph
+  // sfx: shatterfloor branches on KIND first (it uses avoid:'jump' but wants its
+  // own crack); then the avoid-verb switch covers the rest.
+  if (mech.kind === 'shatterfloor') game.audio.warnShatter();
+  else if (mech.avoid === 'jump') game.audio.warnJump();
+  else if (mech.avoid === 'dodge') game.audio.warnSweep();
+  else if (mech.avoid === 'flee') game.audio.warnTether();
+  else if (mech.avoid === 'in') game.audio.warnIn();   // inverted "sanctuary"/soak telegraph
   else game.audio.warnMove();
 }
 
 function updateTelegraphs(game, dt) {
   for (let i = telegraphs.length - 1; i >= 0; i--) {
     const tg = telegraphs[i];
+    // Abort guard (defense in depth): if the source boss died, leashed, or is
+    // otherwise no longer engaged mid-cast, cancel the telegraph instead of
+    // letting it track the player and fire. killEnemy() and the leash 'return'
+    // transition already cancel directly; this also covers respawn/idle resets.
+    const s = tg.source;
+    if (!s || !s.alive || s.state === 'return' || s.state === 'idle' ||
+        s.state === 'wander' || s.state === 'dead') {
+      disposeTelegraph(game, tg);
+      telegraphs.splice(i, 1);
+      continue;
+    }
     tg.t += dt;
     tg.fill.scale.setScalar(Math.max(0.01, Math.min(1, tg.t / tg.mech.telegraph)));
-    if (tg.t < tg.mech.telegraph) continue;
 
-    for (const m of [tg.ring, tg.fill]) {
-      game.scene.remove(m);
-      m.geometry.dispose();
-      m.material.dispose();
+    // per-frame follow during the telegraph window (mirror where fill.scale is set)
+    if (tg.t < tg.mech.telegraph) {
+      if (tg.mech.kind === 'beam' && tg.wedge) {
+        // sweep the wedge from angle0 across `sweep` radians over the telegraph.
+        // angle0 is a +Z-facing world angle (atan2(dx,dz)). For a CircleGeometry
+        // centered on local +X laid flat by rotation.x=-PI/2, rotation.z = θ-PI/2
+        // aims the wedge center at world angle θ (verified empirically).
+        const theta = tg.angle0 + tg.mech.sweep * (tg.t / tg.mech.telegraph);
+        tg.wedge.rotation.z = theta - Math.PI / 2;
+      } else if (tg.mech.kind === 'tether' && tg.chain) {
+        // stretch the chain segment from the fixed anchor to the live player pos
+        const a = tg.anchor, pp = game.player.group.position;
+        const dx = pp.x - a.x, dz = pp.z - a.z;
+        const len = Math.max(0.001, Math.hypot(dx, dz));
+        const y = heightAt(a.x, a.z) + 0.6;
+        tg.chain.position.set(a.x + dx / 2, y, a.z + dz / 2);
+        tg.chain.scale.x = len;                       // BoxGeometry base length is 1u
+        tg.chain.rotation.y = Math.atan2(dx, dz) - Math.PI / 2;  // x-axis along anchor→player
+      }
+      continue;
     }
+
+    // ---- resolve: dispose ALL meshes (ring/fill + every per-kind extra) ----
+    disposeTelegraph(game, tg);
     telegraphs.splice(i, 1);
-    game.fx.burst(new THREE.Vector3(tg.x, heightAt(tg.x, tg.z), tg.z), tg.mech.color, 32);
+    const eMul = enrageMul(tg.source);
+    const burstColor = eMul > 1 ? 0xff2a2a : tg.mech.color;   // red burst when enraged
+    game.fx.burst(new THREE.Vector3(tg.x, heightAt(tg.x, tg.z), tg.z), burstColor, 32);
     game.audio.bolt();
 
-    // firepatch: drop a lingering hazard disc where the telegraph resolved
-    if (tg.mech.kind === 'firepatch') spawnFirePatch(game, tg);
+    // firepatch: drop a lingering hazard disc where the telegraph resolved (enrage
+    // scales the linger tick too — stash the mult on the patch via a temp field)
+    if (tg.mech.kind === 'firepatch') {
+      const baseLinger = tg.mech.lingerDmg;
+      if (eMul > 1) tg.mech = { ...tg.mech, lingerDmg: Math.round(baseLinger * eMul) };
+      spawnFirePatch(game, tg);
+    }
 
     const p = game.player;
     if (!p.alive) continue;
-    const dist = Math.hypot(p.group.position.x - tg.x, p.group.position.z - tg.z);
+    const px = p.group.position.x, pz = p.group.position.z, py = p.group.position.y;
+    const dist = Math.hypot(px - tg.x, pz - tg.z);
+
+    // ===== new kinds (resolve BEFORE the generic dist check; mirror sanctuary) =====
+
+    // beam: lethal angular wedge. Final center-angle aF = angle0 + sweep. Player
+    // is hit if within `length` AND within halfArc of the final wedge angle.
+    if (tg.mech.kind === 'beam') {
+      const b = tg.source.group.position;
+      const aF = tg.angle0 + tg.mech.sweep;
+      const ap = Math.atan2(px - b.x, pz - b.z);
+      const d = Math.hypot(px - b.x, pz - b.z);
+      if (d <= tg.mech.length && Math.abs(wrapPi(ap - aF)) <= tg.mech.halfArc) {
+        p.takeDamage(game, Math.round(tg.mech.dmg * eMul), tg.source);
+      } else {
+        game.ui.log(tg.mech.dodgeMsg, 'log-sys');
+        game.ui.floatText(p.group.position, 'Dodged!', 'heal');
+        armAvenger(game);
+      }
+      continue;
+    }
+
+    // soak: ALWAYS damages. Inside = dmg (+armAvenger); outside = the magnified
+    // unsoaked burst (NO armAvenger — eating the full weight is the punish).
+    if (tg.mech.kind === 'soak') {
+      if (dist <= tg.mech.radius + 0.4) {
+        p.takeDamage(game, Math.round(tg.mech.dmg * eMul), tg.source);
+        game.ui.floatText(p.group.position, 'Soaked!', 'heal');
+        armAvenger(game);
+      } else {
+        p.takeDamage(game, Math.round(tg.mech.unsoakedDmg * eMul), tg.source);
+      }
+      continue;
+    }
+
+    // tether: break by distance from the FIXED anchor. Break = dodge; else pull
+    // back to the anchor and eat the burst. breakDist is 10 (Dash is only 8u).
+    if (tg.mech.kind === 'tether') {
+      const a = tg.anchor;
+      const d = Math.hypot(px - a.x, pz - a.z);
+      if (d > tg.mech.breakDist) {
+        game.ui.log(tg.mech.dodgeMsg, 'log-sys');
+        game.ui.floatText(p.group.position, 'Broken!', 'heal');
+        armAvenger(game);
+      } else {
+        if (tg.mech.pullBack) placeOnGround(p.group, a.x, a.z);   // snap to anchor, on the floor
+        p.takeDamage(game, Math.round(tg.mech.dmg * eMul), tg.source);
+      }
+      continue;
+    }
+
+    // shatterfloor: checker collapse. Hit if on a falling-parity tile within the
+    // grid AND grounded; airborne OR a safe tile OR off-grid = dodge.
+    if (tg.mech.kind === 'shatterfloor') {
+      const b = tg.source.group.position;
+      const pb = (Math.floor((px - tg.ox) / tg.tile) + Math.floor((pz - tg.oz) / tg.tile)) & 1;
+      const withinGrid = Math.abs(px - b.x) <= tg.mech.radius && Math.abs(pz - b.z) <= tg.mech.radius;
+      const air = py - heightAt(px, pz);
+      if (withinGrid && pb === tg.parityBit && air <= 0.7) {
+        p.takeDamage(game, Math.round(tg.mech.dmg * eMul), tg.source);
+      } else {
+        game.ui.log(tg.mech.dodgeMsg, 'log-sys');
+        game.ui.floatText(p.group.position, 'Dodged!', 'heal');
+        armAvenger(game);
+      }
+      continue;
+    }
+
+    // ===== existing kinds =====
     // sanctuary (avoid 'in'): the circle is the ONLY safe ground — inverted.
     // Jumping does not save you; you must consciously step into the umbra.
     if (tg.mech.kind === 'sanctuary') {
@@ -869,7 +1213,7 @@ function updateTelegraphs(game, dt) {
         game.ui.floatText(p.group.position, 'Sheltered!', 'heal');
         armAvenger(game);
       } else {
-        p.takeDamage(game, tg.mech.dmg, tg.source);  // outside = full burst, anywhere
+        p.takeDamage(game, Math.round(tg.mech.dmg * eMul), tg.source);  // outside = full burst, anywhere
       }
       continue;
     }
@@ -881,7 +1225,7 @@ function updateTelegraphs(game, dt) {
       continue;
     }
     if (tg.mech.avoid === 'jump') {
-      const air = p.group.position.y - heightAt(p.group.position.x, p.group.position.z);
+      const air = py - heightAt(px, pz);
       if (air > 0.7) {
         game.ui.log(tg.mech.dodgeMsg, 'log-sys');
         game.ui.floatText(p.group.position, 'Dodged!', 'heal');
@@ -889,7 +1233,7 @@ function updateTelegraphs(game, dt) {
         continue;
       }
     }
-    p.takeDamage(game, tg.mech.dmg, tg.source);
+    p.takeDamage(game, Math.round(tg.mech.dmg * eMul), tg.source);
   }
 }
 
@@ -938,6 +1282,8 @@ export function updateEnemies(game, dt, elapsed) {
         e.group.rotation.z = 0;
         e.group.visible = true;
         e.mechTimer = 4;
+        e.combatT = 0;          // enrage resets on respawn too
+        e._enraged = false;
         if (t.summons) e.summonAt = [...t.summons.at];
         placeOnGround(e.group, e.home.x, e.home.z);
       }
@@ -954,7 +1300,8 @@ export function updateEnemies(game, dt, elapsed) {
       if (e.pendingHit <= 0) {
         e.pendingHit = -1;
         if (player.alive && distToPlayer < t.attackRange + 1.2) {
-          const dmg = Math.round(t.dmgMin + Math.random() * (t.dmgMax - t.dmgMin));
+          const enraged = t.enrageAt && e.combatT >= t.enrageAt;
+          const dmg = Math.round((t.dmgMin + Math.random() * (t.dmgMax - t.dmgMin)) * (enraged ? t.enrageMult : 1));
           player.takeDamage(game, dmg, e);
         }
       }
@@ -1021,15 +1368,33 @@ export function updateEnemies(game, dt, elapsed) {
         e.anim.moving = true;
         e.anim.speed = 1;
         if (e.minions.length) clearMinions(game, e);
+        // leashed/disengaged mid-cast: drop any in-flight telegraph so its wedge/
+        // chain/soak/tile can't follow the player home and fire after the reset.
+        cancelTelegraphsFor(game, e);
         const d = moveToward(e, e.home, t.speed * 1.2, dt);
         if (d < 0.5) {
           e.state = 'idle';
           e.stateTimer = 1;
           e.hp = e.maxHp;
           e.mechTimer = 4;
+          e.combatT = 0;          // enrage resets when the fight resets (leash)
+          e._enraged = false;
           if (t.summons) e.summonAt = [...t.summons.at];
         }
         break;
+      }
+    }
+
+    // enrage clock: accumulate while engaged (drives Khronaxis' enrageAt timer)
+    if (e.state === 'chase' || e.state === 'attack') {
+      e.combatT += dt;
+      // one-time announce the moment the hour runs out
+      if (t.enrageAt && !e._enraged && e.combatT >= t.enrageAt) {
+        e._enraged = true;
+        game.ui.log(`${e.name} — the hour finally runs out.`, 'log-in');
+        game.ui.mechWarning('enrage');     // unmissable center-screen banner
+        game.audio.warnEnrage?.();         // distinct doom-klaxon for the one hard timer
+        game.fx.burst(e.group.position, 0xff2a2a, 36);
       }
     }
 
@@ -1087,7 +1452,12 @@ export function killEnemy(e, game) {
   e.deathT = 0;
   e.respawnTimer = e.type.respawn ?? (e.elite ? 45 : 14);
   e.state = 'dead';
-  if (game && e.minions.length) clearMinions(game, e);
+  if (game) {
+    if (e.minions.length) clearMinions(game, e);
+    // cancel any in-flight telegraph this enemy was casting — a dead boss must
+    // not keep tracking the player and then fire the burst on the kill itself.
+    cancelTelegraphsFor(game, e);
+  }
 }
 
 export function updateNpc(npc, game, elapsed) {

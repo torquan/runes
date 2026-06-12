@@ -195,6 +195,7 @@ function onKill(game, enemy) {
   game.frostveilQuests?.onKill(game, enemy);
   game.sanctumQuests?.onKill(game, enemy);
   game.hollowQuests?.onKill(game, enemy);
+  game.horologiumQuests?.onKill(game, enemy);
 }
 
 function rollDamage(player, mult) {

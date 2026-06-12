@@ -9,7 +9,7 @@ each iteration ends in a green `vite build` and a commit.
 | --- | --- | --- |
 | 1 | Design pass → `EXPANSION.md` spec ("The Hollow Hour", 106–120) | ✅ done |
 | 2 | **A** — The Verdant Hollow zone (106–118): mobs, Greta's chain, Vorthal | ✅ done |
-| 3 | **B** — The Last Hour dungeon (116–120): 4 NEW mechanic kinds, cap → 120 | pending |
+| 3 | **B** — The Last Hour dungeon (116–120): 4 NEW mechanic kinds, cap → 120 | ✅ done |
 | 4 | **C** — Crafting/gathering + item sets + new class skills | pending |
 | 5 | **D** — Achievements/Bestiary panel (K) + titles | pending |
 | 6 | **E** — Hidden layer: the Larder, treasure maps, mimics, Grim, riddles | pending |
@@ -75,3 +75,36 @@ parallel authors on disjoint new files → single integrator for hub files
 - Known cosmetic quirks (accepted): Sanctum return point sits 2u from the
   descent portal (F-triggered, no loop); Hollow arrival is on the steep
   entry ramp (frostveil idiom).
+
+### Iteration 3 — B: The Last Hour (2026-06-12) ✅
+
+- Workflow `iteration-b-last-hour` (17 agents, ~1.36M subagent tokens):
+  planner → 4 parallel authors (engine / shell / loot / story) → integrator
+  → 3 full fix rounds until review-clean. The in-workflow smoke slot was
+  consumed by fix rounds, so a dedicated smoke agent ran afterwards: PASS.
+- Shipped: `src/horologium.js` (brass-and-basalt clockwork tomb, wall
+  AABBs, orrery decor, exit portal), HOROLOGIUM pocket (x 250–360,
+  z 200–320, floor y 60) + bounds in `noise.js`, dungeon entry at the
+  Hollow's spiral center (gate: Noctyra slain OR level 112).
+- **Four brand-new mechanic kinds** in the telegraph engine
+  (`entities.js`), each with full ring+disc+banner+sfx UX:
+  `beam` (rotating wedge, DODGE!), `soak` (GET IN!, absence pays 2.4×),
+  `tether` (RUN!, snap at 10u — Dash 8u alone can't trivialize it,
+  staying snaps you back to the anchor), `shatterfloor` (checker tiles,
+  JUMP!). Plus the game's first **enrage timer** on Khronaxis (200s,
+  ×1.6 melee+mechanics, red-tinted telegraphs, resets on leash).
+- Bosses: Quaranth, the Unwound (L116, beam), Echo of the First Minute
+  (L118, tether+soak), **Khronaxis, the Hour That Was Kept (L120)** —
+  killing him raises `LEVEL_CAP` to 120 (gainXp guard, xp pinned at cap).
+  Tamsin Verge's descent chain + bounty; dungeon drop tier + relic BiS
+  "The Last Hour"; `__veteran3('<class>')` console seed (L118
+  post-Vorthal).
+- Smoke evidence (exact numbers): beam eaten 1888 vs dodged 0; tether
+  stayed 1920 + pull-back vs snapped 0; soak inside 1824 vs outside 4378
+  (=2.4×); shatterfloor grounded 2098 vs airborne 0; enraged hit
+  3357 = 2098×1.6; cap stop at 120 over 8 XP grants; v5 roundtrip;
+  zero console errors.
+- Orchestrator post-fixes: exit-portal arrival nudged off Tamsin's model
+  (2.5, −329); entry cogwraith pack moved z216→221 so the arrival swirl
+  is outside its aggro radius (jank fix, not a nerf — pack still guards
+  the entry corridor).

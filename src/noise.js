@@ -45,6 +45,11 @@ export const SANCTUM = { x1: -60, x2: 60, z1: 250, z2: 360, floor: 40 };
 // The Verdant Hollow: SANCTUM's southern mirror — an OUTDOOR pocket (own noise profile + ground mesh in hollow.js).
 export const HOLLOW = { x1: -60, x2: 60, z1: -360, z2: -250 };
 
+// The Horologium ("The Last Hour"): a clockwork tomb far SE of CRYPT (shares the
+// x250..360 band but z200..320 — disjoint from CRYPT's z−60..60, so no overlap).
+// Flat floor like CRYPT/SANCTUM; geometry in horologium.js centers on x≈305.
+export const HOROLOGIUM = { x1: 250, x2: 360, z1: 200, z2: 320, floor: 60 };
+
 // Per-zone playable bounds (player clamp + Dash clamp read these — one truth).
 // 'highlands' shares the continuous overworld box.
 export const ZONE_BOUNDS = {
@@ -54,6 +59,7 @@ export const ZONE_BOUNDS = {
   frostveil: { x1: -358, x2: -252, z1: -58, z2: 58 },
   sanctum:   { x1: -58, x2: 58, z1: 252, z2: 358 },
   hollow:    { x1: -58, x2: 58, z1: -358, z2: -252 },
+  horologium:{ x1: 252, x2: 358, z1: 202, z2: 318 },
 };
 
 // The Ashen Highlands: the eastern shelf of the same continuous map. NOT a
@@ -76,6 +82,7 @@ export function inHighlands(x) { return x > HIGHLANDS.GATE_X; }
 export function heightAt(x, z) {
   if (x > CRYPT.x1 && x < CRYPT.x2 && z > CRYPT.z1 && z < CRYPT.z2) return CRYPT.floor;
   if (x > SANCTUM.x1 && x < SANCTUM.x2 && z > SANCTUM.z1 && z < SANCTUM.z2) return SANCTUM.floor;
+  if (x > HOROLOGIUM.x1 && x < HOROLOGIUM.x2 && z > HOROLOGIUM.z1 && z < HOROLOGIUM.z2) return HOROLOGIUM.floor;
 
   // the Verdant Hollow: a sunken bioluminescent grotto — rolling moss humps, one
   // flat central glow-pool basin, steep grotto walls at every pocket edge

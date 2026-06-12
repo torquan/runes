@@ -135,6 +135,9 @@ const SANCTUM_KINDS = new Set(['custodian', 'seraphel', 'noctyra']);
 // the Verdant Hollow family — five culls (NOT Vorthal; the world boss is no
 // bounty fodder). Greta's standing order counts these; Barnaby's never does.
 const HOLLOW_KINDS = new Set(['sporecaller', 'hollowstalker', 'bloomwarden', 'swarmling', 'spireshade']);
+// the Horologium family — the dungeon trash (NOT the three clockwork bosses).
+// Tamsin's standing order counts these two; Barnaby's never does.
+const HOROLOGIUM_KINDS = new Set(['cogwraith', 'sandflayer']);
 
 export function createQuests() {
   return makeChain({
@@ -144,7 +147,8 @@ export function createQuests() {
     // (thunderbristle is in no set, so it still counts for Barnaby — as intended)
     bountyCounts: (enemy) =>
       !HIGHLAND_KINDS.has(enemy.kind) && !FROSTVEIL_KINDS.has(enemy.kind) &&
-      !SANCTUM_KINDS.has(enemy.kind) && !HOLLOW_KINDS.has(enemy.kind),
+      !SANCTUM_KINDS.has(enemy.kind) && !HOLLOW_KINDS.has(enemy.kind) &&
+      !HOROLOGIUM_KINDS.has(enemy.kind),
     vendor: true,    // Barnaby sells wares + buys loot
   });
 }
@@ -294,6 +298,48 @@ export function createHollowQuests() {
     npcName: 'Greta Thornby',
     bountyCounts: (enemy) => HOLLOW_KINDS.has(enemy.kind),
     vendor: false,   // Greta gardens in hell, she does not sell
+  });
+}
+
+// ===== The Last Hour — Tamsin Verge's chain (capstone descent, L116–120) =====
+// A time-broken survivor who speaks half a sentence ahead of herself, stood at
+// the Hollow's deepest signpost where the spiral becomes a clockwork tomb. One
+// trash cull, the two clockwork mini-bosses, then Khronaxis — and with the last
+// hour taken, the world (and the player's level cap) can run on. Her own
+// zone-gated bounty.
+const HOROLOGIUM_QUESTS = [
+  { id: 't_cogs', name: 'What the Sand Remembers', targetKind: 'cogwraith', count: 8, trial: false,
+    intro: `You hear it too? Good. I thought it was just me, again, still, already. Down there the clock that holds the last hour is winding DOWN — and when it stops, so does everything. The wraiths are minutes that came loose. Put them back. Gently.`,
+    outro: `Eight minutes, returned. The sand falls a little slower now. You're either very brave or you can't hear how this ends. Both, maybe.`,
+    rewardXp: 8750, rewardGold: 6000 },
+  { id: 't_quaranth', name: 'The Pendulum Stops for No One', targetKind: 'quaranth', count: 1, trial: true,
+    intro: `Quaranth was the keeper before the keeper. It stopped mid-swing, mid-thought, mid-IS. It won't let you past until it finishes the sentence. Don't let it finish the sentence.`,
+    outro: `It said its last word. 'Was.' Then it was. Tragic. Loot it.`,
+    rewardXp: 12000, rewardGold: 14000, rewardRunes: 3 },
+  { id: 't_echo', name: 'An Echo, A Minute Late', targetKind: 'echo', count: 1, trial: true,
+    intro: `You'll meet yourself down there — a half-second behind, holding a grudge. It chains you to where you just stood and drops the sky where you'll be. Be somewhere it doesn't expect. Be NOW.`,
+    outro: `It stopped echoing. The silence is the loudest thing I've heard in a hundred years.`,
+    rewardXp: 12500, rewardGold: 18000, rewardRunes: 4 },
+  { id: 't_khronaxis', name: 'The Hour That Was Kept', targetKind: 'khronaxis', count: 1, trial: true,
+    intro: `Khronaxis kept the last hour so the world would never reach the end of it. It is so tired. It WANTS you to take the hour — but its hands don't know how to let go, and they're as old as the world and they hit like it. When its time runs out it will rage; finish it before it remembers how. Then the hour is yours. Mind it. The world's counting on you — literally.`,
+    outro: `It let go. The sand runs both ways now. You can age past where the world ever let anyone age. Go on. You've earned the next twenty years.`,
+    rewardXp: 11460, rewardGold: 50000, rewardRunes: 8 },
+];
+
+const HOROLOGIUM_BOUNTY = {
+  name: 'Loose Minutes', count: 12,
+  intro: `The clock sheds minutes faster than I can gather them — twelve more of the loose ones, whatever shape they've taken. Cogwraiths, Sandflayers, doesn't matter. Bring the time back. Some of it. Any of it.`,
+  outro: `Twelve minutes, gathered. The sand stalls a heartbeat longer. We are, against all odds, not yet out of time.`,
+};
+function hgBountyXp(game) { return Math.max(11000, game.player.level * 100); }
+function hgBountyGold(game) { return Math.max(11000, game.player.level * 100); }
+
+export function createHorologiumQuests() {
+  return makeChain({
+    quests: HOROLOGIUM_QUESTS, bounty: HOROLOGIUM_BOUNTY, bountyXp: hgBountyXp, bountyGold: hgBountyGold,
+    npcName: 'Tamsin Verge',
+    bountyCounts: (enemy) => HOROLOGIUM_KINDS.has(enemy.kind),
+    vendor: false,   // Tamsin keeps time, she does not sell
   });
 }
 
@@ -560,6 +606,9 @@ function targetName(kind) {
     sporecaller: 'Sporecaller', hollowstalker: 'Hollowstalker', bloomwarden: 'Bloomwarden',
     swarmling: 'Mycelial Swarmling', spireshade: 'Spireshade, the Mother-Bloom',
     vorthal: 'Vorthal, the First Root',
+    cogwraith: 'Cogwraith', sandflayer: 'Sandflayer',
+    quaranth: 'Quaranth, the Unwound', echo: 'Echo of the First Minute',
+    khronaxis: 'Khronaxis, the Hour That Was Kept',
   }[kind] || kind;
 }
 

@@ -301,6 +301,13 @@ export function buildHollow(scene) {
   const entryArch = buildArch(0, -258, false);
   entryArch.infill.visible = false;
 
+  // dungeon mouth arch at (0, −340): the spiral's center, the descent into The
+  // Last Hour. GATED — show the spore-infill plate (closed) until the gate
+  // predicate passes; update() flips swirl on / infill off when it opens.
+  const dungeonArch = buildArch(0, -340, false);
+  dungeonArch.swirl.visible = false;       // closed by default (gate not yet passed)
+  dungeonArch.infill.visible = true;
+
   scene.add(group);
 
   // portal: return only (see contract §F). The entry gate (noctyra/level 102) is
@@ -311,14 +318,26 @@ export function buildHollow(scene) {
       dest: { x: 0, z: 348, zone: 'sanctum' },
       arriveMsg: 'Cold stone. Silence. After the Hollow it feels like holding your breath.',
     },
+    {
+      // descent into The Last Hour. Geometry resolution: the Horologium is built
+      // centered on x≈305 (mirroring CRYPT, which sits at x250..360 centered 305).
+      // The contract's x=0 dungeon coords are SUPERSEDED — arrival lands at (305,210).
+      x: 0, z: -340, label: 'Descend into The Last Hour',
+      dest: { x: 305, z: 210, zone: 'horologium' },
+      gate: (g) => g.slain.has('noctyra') || g.player.level >= 112,
+      arriveMsg: 'The sand stops falling. Somewhere below, something very old hears you arrive and is, against all reason, glad.',
+    },
   ];
 
   const signs = [
     { x: 0, z: -262, label: 'The Verdant Hollow — recommended level 102+. Mind the floor. The floor minds you.' },
     { x: -24, z: -296, label: '"The Mother-Bloom Pool. Do not drink. Do not touch. Do not, under any circumstances, taste. — G.T."' },
     // the z −332 signpost is the spiral's center (Iteration B's dungeon mouth) —
-    // Tamsin Verge stands here later; leave the spot clear, no NPC now.
+    // Tamsin Verge stands here; the integrator spawns her at (0, −332). The
+    // dungeon arch is at z −340 (just past her), so this spot stays clear.
     { x: 0, z: -332, label: '"Below this point the spiral tightens. I went no further. Neither should you, but you will. — G.T."' },
+    // dungeon mouth signpost (the descent into The Last Hour)
+    { x: 0, z: -336, label: 'The Last Hour — recommended level 112+. Bring all the time you have.' },
   ];
 
   // ---- signposts (post + angled board), frostveil pattern ----
@@ -382,11 +401,22 @@ export function buildHollow(scene) {
     entryArch.swirl.material.opacity = pulse;
     entryArch.swirl.rotation.z = elapsed * 0.8;
 
-    // ---- forward-compat gate-visual hook (nil-guarded) ----
-    // Iteration A has no gated arch in the Hollow (entry gating lives on the
-    // SANCTUM-side portal), so this is a gentle no-op: a soft pool-glow lift
-    // that reads as the grotto noticing the player. Shape kept for later gates.
+    // ---- dungeon-mouth gate visuals (nil-guarded) ----
+    // Same predicate as the descent portal's gate: noctyra slain OR level ≥ 112.
+    // Open → swirl on, infill off, swirl pulses/spins like the entry arch.
+    // Closed → spore-infill plate holds the opening shut.
     if (game && game.player) {
+      const open = game.slain.has('noctyra') || game.player.level >= 112;
+      dungeonArch.swirl.visible = open;
+      dungeonArch.infill.visible = !open;
+      if (open) {
+        dungeonArch.swirl.material.opacity = 0.5 + Math.sin(elapsed * 2.1 + 1) * 0.18;
+        dungeonArch.swirl.rotation.z = -elapsed * 0.7;
+      } else {
+        // a slow shut-door shimmer on the infill while the hour stays sealed
+        dungeonArch.infill.material.opacity = 0.42 + Math.sin(elapsed * 0.8) * 0.08;
+      }
+      // a soft pool-glow lift that reads as the grotto noticing the player
       glowPools[0].disc.material.opacity += Math.sin(elapsed * 0.9) * 0.03;
     }
   }
