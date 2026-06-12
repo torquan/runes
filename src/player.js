@@ -618,7 +618,8 @@ export function updatePlayer(game, dt, elapsed) {
     // dungeon walls are solid (for you, at least)
     const walled = game.zone === 'crypt' ? game.dungeon
       : game.zone === 'sanctum' ? game.sanctum
-      : game.zone === 'horologium' ? game.horologium : null;
+      : game.zone === 'horologium' ? game.horologium
+      : game.zone === 'larder' ? game.larder : null;
     if (walled) {
       const r = 0.55;
       for (const w of walled.walls) {

@@ -148,6 +148,7 @@ export function createUi() {
         sanctum: 'The Starfall Sanctum',
         hollow: 'The Verdant Hollow',
         horologium: 'The Last Hour',
+        larder: 'The Larder',
       }[game.zone] || 'Howling Plains';
 
       // target frame
@@ -204,6 +205,9 @@ export function createUi() {
       const pPos = game.player.group.position;
 
       for (const e of game.enemies) {
+        // a dormant reveal:true mimic is disguised as a loot chest — no nameplate,
+        // no hostility cue, until it springs (entities.js sets e._revealed on aggro).
+        if (e.type?.reveal && !e._revealed) { this.removePlate(e); continue; }
         const el = this.plateFor(e, e.elite ? 'hostile elite' : 'hostile');
         const dist = e.group.position.distanceTo(pPos);
         const show = e.alive && dist < 55;
@@ -498,6 +502,7 @@ export function createUi() {
       const color = rarityColor(item.rarity);
       const kindLabel = item.kind === 'material' ? 'Material'
         : item.kind === 'elixir' ? 'Elixir'
+        : item.kind === 'map' ? 'Treasure Map'
         : `${RARITY[item.rarity].label} ${item.slot}${item.unique ? ' · Unique' : ''}${item.reforged ? ' · Reforged' : ''}`;
       let body = `<div class="tip-name" style="color:${color}">${item.name}</div>`;
       body += `<div class="tip-sub">${kindLabel}</div>`;
@@ -537,6 +542,9 @@ export function createUi() {
         body += `<div class="tip-set-bonus${count >= 4 ? ' on' : ''}">(4) ${statSummary(s.bonus4)}</div>`;
         body += `</div>`;
       }
+      // treasure-map clue — dev-authored item.clue (HTML-safe), shown as the
+      // dig hint so the player can read the map from the bag (§E.2).
+      if (item.kind === 'map' && item.clue) body += `<div class="tip-clue">“${item.clue}”</div>`;
       if (item.flavor) body += `<div class="tip-flavor">${item.flavor}</div>`;
       if (item.value) body += `<div class="tip-value">Sells for ${item.value} g</div>`;
       return body;
@@ -1068,7 +1076,7 @@ export function createUi() {
       ctx.clip();
 
       // pocket zones sit outside the baked map image — solid zone tints
-      const pocketFill = { crypt: '#0c0a10', frostveil: '#16202e', sanctum: '#0a0816', hollow: '#0e1c10', horologium: '#0c0e16' }[game.zone];
+      const pocketFill = { crypt: '#0c0a10', frostveil: '#16202e', sanctum: '#0a0816', hollow: '#0e1c10', horologium: '#0c0e16', larder: '#221409' }[game.zone];
       if (pocketFill) {
         ctx.fillStyle = pocketFill;
         ctx.fillRect(0, 0, S, S);
@@ -1092,6 +1100,9 @@ export function createUi() {
 
       for (const e of game.enemies) {
         if (!e.alive) continue;
+        // a dormant reveal:true mimic is disguised as a loot chest — keep it off
+        // the minimap (no gold elite pip) until it springs (entities.js sets e._revealed).
+        if (e.type?.reveal && !e._revealed) continue;
         dot(e.group.position.x, e.group.position.z, e.elite ? '#ffd76e' : '#ff5a3c', e.elite ? 7 : 4);
       }
       for (const n of game.npcs) dot(n.group.position.x, n.group.position.z, '#ffe9b0', 5);

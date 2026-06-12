@@ -88,4 +88,15 @@ export const sfx = {
   craftDone() { tone(880, 'triangle', 0.004, 0.3, 0.4); tone(1320, 'sine', 0.004, 0.4, 0.3, 0, 0.05); tone(660, 'triangle', 0.01, 0.45, 0.28, 0, 0.05); },
   // ccThud: a dull control-impact thud — they staggered, not a klaxon
   ccThud()    { tone(90, 'square', 0.004, 0.14, 0.5); tone(130, 'sawtooth', 0.006, 0.1, 0.35); noiseBurst(0.06, 700, 0.4); },
+  // ---- Iteration E: the hidden layer ----
+  // creak: the mimic proximity tell — one low wooden groan, no banner
+  creak()     { tone(70, 'sawtooth', 0.02, 0.4, 0.5); },
+  // snarl: the mimic reveal/aggro bite — a low growl with a wet noise-snap
+  snarl()     { tone(90, 'sawtooth', 0.01, 0.2, 0.6); noiseBurst(0.12, 500, 0.6); },
+  // knock: the Larder knock thud — a single muffled wooden rap (integrator calls)
+  knock()     { tone(120, 'sine', 0.005, 0.18, 0.5); noiseBurst(0.06, 300, 0.4); },
+  // dig: the treasure-dig scrape — an earthy shovel-bite (integrator calls)
+  dig()       { noiseBurst(0.18, 400, 0.45); tone(110, 'triangle', 0.01, 0.2, 0.3); },
+  // ritualHum: the Sanctum ritual node press — a rising astral two-tone (integrator calls)
+  ritualHum() { tone(196, 'sine', 0.05, 0.5, 0.4); tone(294, 'sine', 0.05, 0.6, 0.35, 0, 0.08); },
 };

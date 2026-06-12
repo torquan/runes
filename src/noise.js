@@ -50,6 +50,13 @@ export const HOLLOW = { x1: -60, x2: 60, z1: -360, z2: -250 };
 // Flat floor like CRYPT/SANCTUM; geometry in horologium.js centers on x≈305.
 export const HOROLOGIUM = { x1: 250, x2: 360, z1: 200, z2: 320, floor: 60 };
 
+// The Larder: the secret hoard-pocket — a frostbitten root-cellar in a dead
+// world-edge corner SW past the meadow. Flat floor like CRYPT/SANCTUM. Its
+// discovery entrance (a knock-mound) lives in the Frostveil vale, but the room
+// itself sits HERE, touching nothing (HOLLOW maxes at x=60; LARDER is x150-170,
+// z-360..-340 — no overlap with any pocket). geometry in larder.js, center x≈160.
+export const LARDER = { x1: 150, x2: 170, z1: -360, z2: -340, floor: 20 };
+
 // Per-zone playable bounds (player clamp + Dash clamp read these — one truth).
 // 'highlands' shares the continuous overworld box.
 export const ZONE_BOUNDS = {
@@ -60,6 +67,7 @@ export const ZONE_BOUNDS = {
   sanctum:   { x1: -58, x2: 58, z1: 252, z2: 358 },
   hollow:    { x1: -58, x2: 58, z1: -358, z2: -252 },
   horologium:{ x1: 252, x2: 358, z1: 202, z2: 318 },
+  larder:    { x1: 152, x2: 168, z1: -358, z2: -342 },
 };
 
 // The Ashen Highlands: the eastern shelf of the same continuous map. NOT a
@@ -83,6 +91,7 @@ export function heightAt(x, z) {
   if (x > CRYPT.x1 && x < CRYPT.x2 && z > CRYPT.z1 && z < CRYPT.z2) return CRYPT.floor;
   if (x > SANCTUM.x1 && x < SANCTUM.x2 && z > SANCTUM.z1 && z < SANCTUM.z2) return SANCTUM.floor;
   if (x > HOROLOGIUM.x1 && x < HOROLOGIUM.x2 && z > HOROLOGIUM.z1 && z < HOROLOGIUM.z2) return HOROLOGIUM.floor;
+  if (x > LARDER.x1 && x < LARDER.x2 && z > LARDER.z1 && z < LARDER.z2) return LARDER.floor;
 
   // the Verdant Hollow: a sunken bioluminescent grotto — rolling moss humps, one
   // flat central glow-pool basin, steep grotto walls at every pocket edge

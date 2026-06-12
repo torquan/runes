@@ -12,7 +12,7 @@ each iteration ends in a green `vite build` and a commit.
 | 3 | **B** — The Last Hour dungeon (116–120): 4 NEW mechanic kinds, cap → 120 | ✅ done |
 | 4 | **C** — Crafting/gathering + item sets + new class skills | ✅ done |
 | 5 | **D** — Achievements/Bestiary panel (K) + titles | ✅ done |
-| 6 | **E** — Hidden layer: the Larder, treasure maps, mimics, Grim, riddles | pending |
+| 6 | **E** — Hidden layer: the Larder, treasure maps, mimics, Grim, riddles | ✅ done |
 | 7 | Balance audit, smoke test, docs (README/PLAN) | pending |
 
 Orchestration: one multi-agent workflow per iteration (Opus subagents),
@@ -161,3 +161,38 @@ parallel authors on disjoint new files → single integrator for hub files
   Iteration-E content and stay locked-but-safe until E ships next.
 - Orchestrator post-fix: K-badge 'has-news' glow now clears when the
   panel opens (was permanent once lit).
+
+### Iteration 6 — E: The hidden layer (2026-06-13) ✅
+
+- Workflow `iteration-e-hidden-layer` (17 agents, ~1.58M tokens): planner
+  → 3 parallel authors (pocket / monsters / treasure) → integrator →
+  verify loop. Build green, zero blockers, smoke PASS.
+- **The Larder** (`src/larder.js`, pocket x 152..168, z −358..−342,
+  floor y 20): a thawed trapdoor cache found by knocking three times
+  within 6s on an unmarked frostveil mound — wrong timing resets. Portal
+  joins `allPortals()` only after `secrets.pocket.larderOpen`; minimap
+  never advertises it. Inside: clay urns (8k + 12k gold, loot-once),
+  The Badger's Hoard vanity relic + the Hoardfinder title.
+- **Treasure maps**: rare drops carrying prose clues; 5 dig spots across
+  world/frostveil/highlands/crypt/sanctum; 2.5s F-dig cast → chest +
+  gold + generated item; re-dig refused; cartographer achievement counts
+  distinct dug keys.
+- **Mimics**: disguised chests seeded in dungeons (no nameplate until
+  revealed), L60 elite ccImmune ambush; killed placed-mimics persist via
+  `secrets.mimics` and are removed on load (mechanism moved spawn-time →
+  load-time deliberately: spawnEnemies runs pre-save-read; in-session
+  45s respawn keeps `exterminator` farmable).
+- **Grim, the Tax Collector** (L119, 140k hp, ccImmune): summoned at the
+  Sanctum dais by pressing the constellation nodes dim → bright →
+  flickering (matches Madge's riddle #5); drops The Final Invoice;
+  summons collateral mimics at 50%; re-summon allowed, never two at once.
+- **Madge riddles 4–6** (boar / dim-bright-flickering / chest / knock
+  thrice): `secrets.riddles` now reaches 6, +5 runes each from #4.
+- All five dormant D achievements now earnable — smoke run finished at
+  10/18 with titles (Hoardfinder, the Settled, Madge-Approved) worn.
+- Orchestrator post-fixes: Larder HUD zone name + minimap pocket tint
+  added; dead `makeTreasureMap`/`TREASURE_MAPS` imports trimmed.
+- Accepted deviations (documented in code): Grim's invoice drops on
+  every kill (vanity-tier, dupe-safe); `secrets.ritual.done` persisted
+  but unread (achievement keys off slain); disguised mimics are
+  targetable-but-silent (reads as intended tension).

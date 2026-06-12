@@ -101,17 +101,52 @@ export function buildSanctum(scene) {
   const starMapMat = new THREE.MeshBasicMaterial({
     color: 0x9fb8ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide,
   });
+  // the two z=312 pillars are repurposed by the Grim ritual (§E.4): the dim one
+  // and the bright one. Their quads get their OWN materials so the ritual glints
+  // read distinctly without touching the other four decorative pillars.
+  const ritualQuadMats = {};   // keyed by glint: 'dim' (low opacity), 'bright' (high)
   [[-11.2, 298], [-11.2, 305], [-11.2, 312], [11.2, 298], [11.2, 305], [11.2, 312]]
     .forEach(([px, pz]) => {
       const inner = px < 0 ? 1 : -1;        // face the quad into the hall
       const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 4.4, 6), darkStone);
       pillar.position.set(px, F + 2.2, pz);
       pillar.castShadow = true;
-      const quad = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 2.4), starMapMat);
+      // the z=312 pillars are the ritual's dim/bright nodes — give each its own mat
+      let quadMat = starMapMat;
+      if (pz === 312) {
+        const glint = px < 0 ? 'dim' : 'bright';
+        quadMat = new THREE.MeshBasicMaterial({
+          color: glint === 'dim' ? 0x4a5a8a : 0xcfe0ff,
+          transparent: true, opacity: glint === 'dim' ? 0.22 : 0.9, side: THREE.DoubleSide,
+        });
+        ritualQuadMats[glint] = quadMat;
+      }
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 2.4), quadMat);
       quad.position.set(px + inner * 0.62, F + 2.6, pz);
       quad.rotation.y = inner * Math.PI / 2;
       group.add(pillar, quad);
     });
+
+  // the THIRD ritual node — a new short pillar at (0, 320) for the flicker glint.
+  // Stands in the corridor-B lane just past the mid hall, facing the dais beyond.
+  const flickerMat = new THREE.MeshBasicMaterial({
+    color: 0x9fb8ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+  });
+  ritualQuadMats.flicker = flickerMat;
+  const flickerPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 2.8, 6), darkStone);
+  flickerPillar.position.set(0, F + 1.4, 320);
+  flickerPillar.castShadow = true;
+  const flickerQuad = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.6), flickerMat);
+  flickerQuad.position.set(0, F + 1.9, 320.6);   // faces north, toward the dais
+  group.add(flickerPillar, flickerQuad);
+
+  // the three ritual nodes the integrator distance-checks (order does NOT matter;
+  // the integrator enforces the dim->bright->flicker press order). x/z + glint only.
+  const ritualNodes = [
+    { x: -11.2, z: 312, glint: 'dim' },
+    { x: 11.2, z: 312, glint: 'bright' },
+    { x: 0, z: 320, glint: 'flicker' },
+  ];
 
   // slowly rotating orrery of 3 wireframe torus rings over the mid hall
   const orrery = new THREE.Group();
@@ -181,6 +216,7 @@ export function buildSanctum(scene) {
 
   return {
     walls: wallBoxes,
+    ritualNodes,
     portals: [
       {
         x: 0, z: 260, label: 'Climb back to the tarn',
@@ -211,6 +247,8 @@ export function buildSanctum(scene) {
       // tumble the dark icosahedron in the Star Cradle
       cradle.rotation.x = elapsed * 0.18;
       cradle.rotation.y = elapsed * 0.11;
+      // the flicker ritual node "cannot make up its mind" — fast, irregular opacity
+      flickerMat.opacity = 0.42 + Math.sin(elapsed * 9.3) * 0.28 * Math.sin(elapsed * 2.7);
       // drift the astral motes upward, wrapping back to the floor (elapsed-driven,
       // so it's framerate-independent like the rest of the update)
       const p = motes.geometry.attributes.position;

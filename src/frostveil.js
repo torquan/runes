@@ -325,6 +325,48 @@ export function buildFrostveil(scene) {
   group.add(fissureLight);
   let fissureGateOpen = false;
 
+  // ---- the Larder knock-mound: the secret hoard-pocket's discovery entrance ----
+  // a half-buried DodecahedronGeometry cluster at the vale's darkest corner
+  // (the aurora's dimmest band, x≈−340 z≈−40). Knock three times (main.js owns
+  // the state machine) and openLarder() thaws it: the mound rotates open and a
+  // swirlIn appears. The destination ROOM is the relocated LARDER pocket — only
+  // the discovery prop lives here. larderMoundPos is exposed for the F-check.
+  const moundX = -340, moundZ = -40;
+  const moundY = heightAt(moundX, moundZ);
+  const mound = new THREE.Group();
+  const moundMat = new THREE.MeshLambertMaterial({ color: 0x3a3a44, flatShading: true });
+  const moundSnowMat = new THREE.MeshLambertMaterial({ color: 0xe2ecf6, flatShading: true });
+  // 3 half-sunk dodecahedra (mossy/snowy), clustered and partly below the snow
+  [[0, 0, 1.5, moundMat], [-1.3, 0.6, 1.0, moundSnowMat], [1.1, -0.7, 1.1, moundMat]]
+    .forEach(([dx, dz, s, mat]) => {
+      const d = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), mat);
+      d.position.set(dx, -s * 0.35, dz);                       // sunk: top pokes above ground
+      d.rotation.set(dx * 0.6, dx + dz, dz * 0.5);
+      d.castShadow = true;
+      mound.add(d);
+    });
+  mound.position.set(moundX, moundY + 0.2, moundZ);
+  group.add(mound);
+
+  // swirlIn — the thawed entrance, hidden until openLarder()
+  const moundSwirlMat = new THREE.MeshBasicMaterial({
+    color: 0xffb060, transparent: true, opacity: 0.6, side: THREE.DoubleSide,
+  });
+  const moundSwirl = new THREE.Mesh(new THREE.CircleGeometry(1.3, 24), moundSwirlMat);
+  moundSwirl.rotation.x = -Math.PI / 2;
+  moundSwirl.position.set(moundX, moundY + 1.9, moundZ);
+  moundSwirl.visible = false;
+  group.add(moundSwirl);
+
+  let larderOpened = false;
+  function openLarder() {
+    if (larderOpened) return;                                  // idempotent
+    larderOpened = true;
+    mound.rotation.x = -0.9;                                   // tip the cluster open (a thaw)
+    mound.position.y = moundY - 0.4;                           // settle as it cracks
+    moundSwirl.visible = true;
+  }
+
   scene.add(group);
 
   // portal predicates per spec §1.2 (consumed by main.js nearestPortal via gate(game))
@@ -351,6 +393,7 @@ export function buildFrostveil(scene) {
   const signs = [
     { x: -112, z: 18, label: 'The Frostveil — recommended level 78+' },
     { x: -309, z: 12, label: '"The ice below is not ice. Recommended: level 95+, a full belly, and no regrets."' },
+    { x: -336, z: -44, label: '"The badger digs where the aurora never reaches. Three knocks, then wait for the cold to answer."' },
   ];
 
   // ---- signposts (post + angled board), highlands pattern ----
@@ -414,6 +457,12 @@ export function buildFrostveil(scene) {
     returnArch.swirl.material.opacity = pulse;
     returnArch.swirl.rotation.z = elapsed * 0.8;
 
+    // the thawed Larder mound-swirl (only animates once revealed)
+    if (moundSwirl.visible) {
+      moundSwirl.material.opacity = 0.45 + Math.sin(elapsed * 2.2) * 0.18;
+      moundSwirl.rotation.z = elapsed * 0.7;
+    }
+
     // ---- gate visuals: cheap per-frame check of the predicates (nil-guarded) ----
     if (game && game.player) {
       const valeShouldOpen = game.slain.has('pyraxis') || game.player.level >= 78;
@@ -438,5 +487,20 @@ export function buildFrostveil(scene) {
     }
   }
 
-  return { update, portals, signs };
+  // the secret Larder entry portal — provided SEPARATELY, NOT pushed into
+  // portals[]. main.js includes it in allPortals() ONLY when
+  // secrets.pocket.larderOpen is true, so it appears on no minimap before
+  // discovery. The destination is the relocated LARDER pocket room.
+  const larderPortal = {
+    x: -340, z: -40, label: 'Drop into the dark',
+    dest: { x: 160, z: -350, zone: 'larder' },
+    arriveMsg: 'It smells of old fur and older gold.',
+  };
+
+  return {
+    update, portals, signs,
+    larderMoundPos: new THREE.Vector3(moundX, moundY, moundZ),
+    larderPortal,
+    openLarder,
+  };
 }

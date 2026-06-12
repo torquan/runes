@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { heightAt, HIGHLANDS } from './noise.js';
-import { buildBoar, buildWolf, buildHumanoid, buildDragon, buildSerpent, buildSporeling, attachGearHaloes, animateBeast, animateHumanoid, animateSerpent, animateSporeling } from './characters.js';
+import { buildBoar, buildWolf, buildHumanoid, buildDragon, buildSerpent, buildSporeling, buildMimic, attachGearHaloes, animateBeast, animateHumanoid, animateSerpent, animateSporeling, animateMimic } from './characters.js';
 import { choiceIs } from './talents.js';
 
 // Avenger's Pact: a clean telegraph dodge arms an 8s damage window
@@ -466,6 +466,44 @@ const ENEMY_TYPES = {
     ],
     summons: { at: [0.75, 0.5, 0.25], kind: 'cogwraith', count: 2 },
   },
+  // ---- Iteration E: the hidden layer ----
+  mimic: {
+    // a fake loot chest that bites. Tuned as a level-60 elite surprise (at-level-60
+    // player maxHp 2480; DPS 470.8). TTK ≈ 7.9s — a sharp scare, not a slog.
+    name: 'Mimic', level: 60, hp: 3700, dmgMin: 95, dmgMax: 130, xp: 0,
+    speed: 0,                          // ROOTED — a chest can't chase
+    aggroRadius: 3.5,                  // only "wakes" at chest-open range
+    attackRange: 3.0, gold: [400, 900],
+    elite: true, ccImmune: true,       // every elite is ccImmune (CLAUDE.md)
+    leash: 6, armor: 18,               // wooden hide ≈ 4% of an at-level-60 hit
+    build: () => buildMimic(),
+    humanoid: true,                    // faces the player squarely (more menacing)
+    reveal: true,                      // render as a CLOSED chest until aggro'd
+  },
+  // Grim, the Tax Collector — ritual-summoned secret boss (level 119). Pays in loot
+  // + title, not XP. aggroRadius 0 = passive until summoned (summonGrim sets chase)
+  // or hit. Effective dps ≈ 0.074×4840 ≈ 359/s — right at the boss target; all
+  // bursts dodgeable (jump/move). Difficulty by skill check, not stat wall.
+  grim: {
+    name: 'Grim, the Tax Collector', level: 119, humanoid: true, elite: true, ccImmune: true,
+    hp: 140000, dmgMin: 360, dmgMax: 460, xp: 0,
+    speed: 5.5, aggroRadius: 0, attackRange: 3.0,
+    gold: [40000, 60000], leash: 80, armor: 0,
+    // summon-once-per-ritual: a killed Grim is REMOVED (toRemove via the temporary
+    // branch in updateEnemies), never auto-respawned at home. The only way back is
+    // redoing the dim->bright->flicker ritual, which calls summonGrim() (§E.4).
+    temporary: true,
+    build: () => { const g = buildHumanoid('grim'); g.scale.setScalar(1.6); return g; },
+    mechanics: [
+      { kind: 'slam', interval: 9, telegraph: 1.6, radius: 5.5, dmg: 1950, center: 'player', avoid: 'jump',
+        color: 0xffd24a, warn: 'tallies your debts!', dodgeMsg: 'You skip the bill!' },                       // 40% of 4840
+      { kind: 'zone', interval: 11, telegraph: 2.0, radius: 9, dmg: 1840, center: 'boss', avoid: 'move',
+        color: 0xc8a23a, warn: 'seizes the surrounding assets!', dodgeMsg: 'You keep what is yours!' },        // 38%
+      { kind: 'firepatch', interval: 13, telegraph: 1.5, radius: 4, dmg: 1450, center: 'player', avoid: 'move',
+        linger: 18, lingerDmg: 290, color: 0xe0b84a, warn: 'lets the interest accrue.', dodgeMsg: 'Paid early!' }, // 6%/s linger
+    ],
+    summons: { at: [0.5], kind: 'mimic', count: 2 },   // at 50%, "calls in the collateral"
+  },
 };
 
 export const TRIAL_SITES = {
@@ -528,6 +566,10 @@ function makeEnemy(kind, x, z) {
     combatT: 0,                 // accumulates while engaged; drives Khronaxis' enrage
     _shatterCount: 0,           // per-enemy shatterfloor parity counter ('auto')
     _enraged: false,            // latches the one-time enrage announce
+    // Iteration E — mimic reveal state (harmless on every other enemy)
+    _revealed: false,           // a reveal:true chest has sprung its trap
+    _creaked: false,            // the one-time proximity creak has played
+    _wantReveal: false,         // combat-hit path defers the reveal to updateEnemies
     // crowd-control state from the level-55 class skills (all transient)
     ccT: 0, rooted: false, snareT: 0, snareAmt: 0, silenceT: 0,
   };
@@ -595,6 +637,14 @@ export function spawnEnemies(scene) {
   const vargoth = makeEnemy('vargoth', 338, 0);
   enemies.push(ossus, vargoth);
   scene.add(ossus.group, vargoth.group);
+  // Iteration E: a Mimic among the corridor-B decor, off-wall, posing as loot.
+  // Placed unconditionally (spawnEnemies has no game ref); the integrator removes
+  // it on LOAD if secrets.mimics.crypt_b is set, but it respawns within a session
+  // (default elite 45s) so counters.mimic can reach 10 for the exterminator title.
+  const mimicCrypt = makeEnemy('mimic', 320, 4);
+  mimicCrypt.mimicId = 'crypt_b';
+  enemies.push(mimicCrypt);
+  scene.add(mimicCrypt.group);
 
   // ---- the Ashen Highlands: wraith/hound/golem packs, the Emberlord, Pyraxis ----
   // Aggro is LOS-less pure distance AND wander offsets home by up to wanderR, so the
@@ -664,6 +714,12 @@ export function spawnEnemies(scene) {
   const noctyra = makeEnemy('noctyra', 0, 338);
   enemies.push(seraphel, noctyra);
   scene.add(seraphel.group, noctyra.group);
+  // Iteration E: a Mimic in the entry alcove, off-wall, posing as loot. Same
+  // load-removal + in-session respawn contract as the crypt mimic.
+  const mimicSanctum = makeEnemy('mimic', -4, 271);
+  mimicSanctum.mimicId = 'sanctum_entry';
+  enemies.push(mimicSanctum);
+  scene.add(mimicSanctum.group);
 
   // ---- The Verdant Hollow: sporecallers/hollowstalkers/bloomwardens/swarmlings, ----
   // ---- Spireshade in the glow-pool basin, Vorthal at the spiral's center ----
@@ -744,6 +800,20 @@ export function spawnTrialBoss(game, kind) {
   return e;
 }
 
+// Grim, the Tax Collector — summoned by the Sanctum ritual (integrator calls this
+// from the ritual F-handler). Spawns at the Star Cradle dais (0, 346); engages
+// immediately (aggroRadius 0 would otherwise leave it passive). Re-summonable
+// after kill, but never doubled while one is alive.
+export function summonGrim(game) {
+  const existing = game.enemies.find((e) => e.kind === 'grim' && e.alive);
+  if (existing) return existing;
+  const e = makeEnemy('grim', 0, 346);
+  e.state = 'chase';
+  game.enemies.push(e);
+  game.scene.add(e.group);
+  return e;
+}
+
 export function removeEnemy(game, e) {
   game.scene.remove(e.group);
   const i = game.enemies.indexOf(e);
@@ -772,6 +842,9 @@ function summonThralls(game, boss) {
     // carry temporary on the TYPE; this also covers reused-mob summons.)
     e.temporary = true;
     e.state = 'chase';
+    // a summoned reveal:true minion (Grim's "collateral" mimics) is already in
+    // chase, so it skips the proximity-aggro reveal — spring it open immediately.
+    if (e.type.reveal) revealMimic(e, game);
     game.enemies.push(e);
     game.scene.add(e.group);
     boss.minions.push(e);
@@ -1286,6 +1359,14 @@ export function updateEnemies(game, dt, elapsed) {
         e.mechTimer = 4;
         e.combatT = 0;          // enrage resets on respawn too
         e._enraged = false;
+        // a respawned mimic re-closes its lid so it can ambush again (the
+        // in-session re-kills that let counters.mimic reach 10 for exterminator)
+        if (t.reveal) {
+          e._revealed = false; e._creaked = false; e._wantReveal = false;
+          e.anim._revealed = false;
+          const r = e.group.userData.rig;
+          if (r && r.lid) r.lid.rotation.x = 0;
+        }
         if (t.summons) e.summonAt = [...t.summons.at];
         placeOnGround(e.group, e.home.x, e.home.z);
       }
@@ -1295,6 +1376,18 @@ export function updateEnemies(game, dt, elapsed) {
     const distToPlayer = e.group.position.distanceTo(pPos);
     const distToHome = v1.set(e.group.position.x - e.home.x, 0, e.group.position.z - e.home.z).length();
     e.attackCd -= dt;
+
+    // Iteration E — mimic ambush hooks (reveal:true enemies only)
+    if (t.reveal) {
+      // a hit before it woke deferred its reveal to this pass (aggroEnemy has no game)
+      if (e._wantReveal && !e._revealed) revealMimic(e, game);
+      // proximity creak: within 5u but outside aggro range, one low wooden groan.
+      // The ONLY warning — no banner — a skill check of attention.
+      if (!e._creaked && !e._revealed && distToPlayer < 5 && distToPlayer >= t.aggroRadius) {
+        e._creaked = true;
+        game.audio.creak?.();
+      }
+    }
 
     // scheduled attack impact lands mid-animation
     if (e.pendingHit > 0) {
@@ -1328,7 +1421,8 @@ export function updateEnemies(game, dt, elapsed) {
       e.anim.moving = false;
       e.anim.attackT = -1;
       e.pendingHit = -1;
-      if (e.humanoid) animateHumanoid(e.group, e.anim, elapsed + e.home.x);
+      if (t.reveal) animateMimic(e.group, e.anim, elapsed + e.home.x);   // chest rig (mimic is ccImmune, but keep dispatch consistent)
+      else if (e.humanoid) animateHumanoid(e.group, e.anim, elapsed + e.home.x);
       else if (t.serpent) animateSerpent(e.group, e.anim, elapsed + e.home.x);
       else if (t.sporeling) animateSporeling(e.group, e.anim, elapsed + e.home.x);
       else animateBeast(e.group, e.anim, elapsed + e.home.x);
@@ -1445,13 +1539,19 @@ export function updateEnemies(game, dt, elapsed) {
       distToPlayer < t.aggroRadius
     ) {
       e.state = 'chase';
-      game.ui.log(
-        e.humanoid ? `${e.name} draws steel and charges!` : `${e.name} growls and charges at you!`,
-        'log-in'
-      );
+      if (t.reveal) {
+        // the chest springs — its own log/snarl/burst, not the generic charge line
+        revealMimic(e, game);
+      } else {
+        game.ui.log(
+          e.humanoid ? `${e.name} draws steel and charges!` : `${e.name} growls and charges at you!`,
+          'log-in'
+        );
+      }
     }
 
-    if (e.humanoid) animateHumanoid(e.group, e.anim, elapsed + e.home.x);
+    if (t.reveal) animateMimic(e.group, e.anim, elapsed + e.home.x);   // closed chest until revealed
+    else if (e.humanoid) animateHumanoid(e.group, e.anim, elapsed + e.home.x);
     else if (t.serpent) animateSerpent(e.group, e.anim, elapsed + e.home.x); // undulating beast rig
     else if (t.sporeling) animateSporeling(e.group, e.anim, elapsed + e.home.x); // glowcap caster rig
     else animateBeast(e.group, e.anim, elapsed + e.home.x); // offset so herds don't sync
@@ -1463,9 +1563,26 @@ export function updateEnemies(game, dt, elapsed) {
   updateFirePatches(game, dt);
 }
 
+// The mimic reveal: a closed chest springs its trap. Snaps the lid open via the
+// rig (animateMimic honors anim._revealed), bursts, logs, snarls. Idempotent.
+function revealMimic(e, game) {
+  if (e._revealed) return;
+  e._revealed = true;
+  e._wantReveal = false;
+  e.anim._revealed = true;     // animateMimic keeps the lid thrown open from here
+  const r = e.group.userData.rig;
+  if (r && r.lid) r.lid.rotation.x = -1.1;   // snap open this frame
+  game.fx.burst(e.group.position, 0xff5a3a, 20);
+  game.ui.log('The chest had TEETH.', 'log-sys');
+  game.audio.snarl?.();
+}
+
 // called by combat when an enemy takes damage
 export function aggroEnemy(e) {
   if (e.alive && e.state !== 'chase' && e.state !== 'attack') e.state = 'chase';
+  // a reveal:true chest hit before it woke must spring — but aggroEnemy has no
+  // game ref, so defer the visual reveal to the next updateEnemies pass.
+  if (e.type && e.type.reveal && !e._revealed) e._wantReveal = true;
 }
 
 export function killEnemy(e, game) {

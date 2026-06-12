@@ -6,14 +6,15 @@ import { buildFrostveil } from './frostveil.js';
 import { buildSanctum } from './sanctum.js';
 import { buildHollow } from './hollow.js';
 import { buildHorologium } from './horologium.js';
+import { buildLarder } from './larder.js';
 import { buildGathering, gatherNode } from './gathering.js';
 import { heightAt, HIGHLANDS } from './noise.js';
-import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, spawnHollowNpc, spawnHorologiumNpc, updateEnemies, updateNpc, spawnTrialBoss } from './entities.js';
+import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, spawnHollowNpc, spawnHorologiumNpc, updateEnemies, updateNpc, spawnTrialBoss, summonGrim, removeEnemy } from './entities.js';
 import { createPlayer, updatePlayer, CLASSES } from './player.js';
 import { freshTalents, sanitizeTalents } from './talents.js';
 import { castSkill, updateCombat, clickTarget, tabTarget, useRune, createFx } from './combat.js';
 import { createQuests, createHighlandQuests, createFrostveilQuests, createSanctumQuests, createHollowQuests, createHorologiumQuests } from './quests.js';
-import { makeUnique, makeGenerated, rollUid } from './items.js';
+import { makeUnique, makeGenerated, rollUid, ALL_SLOTS } from './items.js';
 import { buildHumanoid } from './characters.js';
 import { createUi } from './ui.js';
 import { checkAchievements } from './achievements.js';
@@ -44,6 +45,7 @@ const frostveil = buildFrostveil(scene);
 const sanctum = buildSanctum(scene);
 const hollow = buildHollow(scene);
 const horologium = buildHorologium(scene);
+const larder = buildLarder(scene);
 const gathering = buildGathering(scene);
 const enemies = spawnEnemies(scene);
 const npc = spawnNpc(scene);
@@ -72,7 +74,7 @@ halla.group.rotation.y = -Math.PI / 4;
 scene.add(npc.group, gateNpc.group, odda.group, fenwick.group, greta.group, tamsin.group, madge.group, halla.group);
 
 const game = {
-  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, hollow, horologium, gathering, enemies,
+  scene, camera, renderer, world, dungeon, highlands, frostveil, sanctum, hollow, horologium, larder, gathering, enemies,
   npc, gateNpc, npcs: [npc, gateNpc, odda, fenwick, greta, tamsin, madge, halla],
   player: null,
   ui: createUi(),
@@ -160,6 +162,16 @@ function setZone(zone) {
     world.hemi.color.set(0x9ab0c8);
     world.sunLight.intensity = 0.1;
     world.sunLight.color.set(0xcfe8ff);
+  } else if (zone === 'larder') {
+    scene.fog.color.set(0x1a1208);     // dim amber root-cellar, buried under the SW corner
+    scene.fog.near = 6;
+    scene.fog.far = 30;
+    scene.background.set(0x0d0905);
+    world.sky.visible = false;         // a buried cellar; the lone amber PointLight carries it
+    world.hemi.intensity = 0.3;
+    world.hemi.color.set(0xb08850);    // warm amber wash
+    world.sunLight.intensity = 0.06;   // no sun reaches the Larder
+    world.sunLight.color.set(0xffd9a0);
   } else {
     scene.fog.color.set(0xc4d4e0);
     scene.fog.near = 60;
@@ -206,6 +218,10 @@ function allPortals() {
   if (game.sanctum) list.push(...game.sanctum.portals);
   if (game.hollow) list.push(...game.hollow.portals);
   if (game.horologium) list.push(...game.horologium.portals);
+  // the Larder exit is always live; the Frostveil->Larder ENTRY portal stays
+  // off every map until the knock puzzle sets secrets.pocket.larderOpen (§E.1).
+  if (game.larder) list.push(...game.larder.portals);
+  if (game.frostveil && game.player?.secrets?.pocket?.larderOpen) list.push(game.frostveil.larderPortal);
   return list;
 }
 
@@ -295,6 +311,13 @@ const RIDDLES = [
     options: ['Gold', 'Footsteps', 'Potions'], answer: 1 },
   { q: 'Every hero in this valley has killed it a hundred times, and it has never once died.',
     options: ['A boar', 'Vargoth', 'Time'], answer: 0 },
+  // §E.5 — riddle #4 is the Grim ritual-order hint (dim -> bright -> flicker)
+  { q: 'Three debts hang in the sanctum sky. You must pay the dim one first, the bright one second, and the one that cannot make up its mind, last. In what order do you press them?',
+    options: ['Dim, bright, flickering', 'Bright, dim, flickering', 'Flickering, dim, bright'], answer: 0 },
+  { q: 'It is opened a thousand times by every hero and has nothing inside but, once, has everything inside but you. What is it?',
+    options: ['A door', 'A chest', 'A hand'], answer: 1 },   // the Mimic joke
+  { q: 'A badger buried it, the aurora hides it, and three knocks wake it. I have never been down there. Would YOU knock on a thing that knocks back?',
+    options: ['Yes, obviously', 'Three times, then wait', 'Never'], answer: 1 },   // the Larder hint
 ];
 
 // Smith Halla's bench — log her introduction the first time, then open the panel.
@@ -309,7 +332,7 @@ function openCraftBench() {
 function openMadgeDialog() {
   const ui = game.ui;
   const s = game.player.secrets;
-  if (s.riddles >= 3) {
+  if (s.riddles >= 6) {
     ui.showDialog({
       title: 'Hermit Madge',
       text: 'The pebble knows the way home. So do you. Off with you — the sock and I are at a delicate juncture.',
@@ -320,7 +343,9 @@ function openMadgeDialog() {
   const r = RIDDLES[s.riddles];
   const lead = s.riddles === 0
     ? 'Forty years I have knitted this sock, and you are the first to climb all the way up here. Heroes. Always climbing. Well then — earn the view. '
-    : 'Another, then. ';
+    : s.riddles === 3
+      ? "You've a knack for this. Here's one that's actually useful, which I resent. "
+      : 'Another, then. ';
   ui.showDialog({
     title: 'Hermit Madge',
     text: lead + r.q,
@@ -341,18 +366,33 @@ function openMadgeDialog() {
           }
           s.riddles++;
           sfx.quest();
-          if (s.riddles >= 3) {
-            const p = game.player;
+          const p = game.player;
+          if (s.riddles === 3) {
+            // the pebble pays at exactly riddle 3 (the original cap), +5 runes
             p.runes += 5;
             p.addItem(game, makeUnique('madge'));
-            ui.hideDialog();
             ui.log('Madge: "Aye. They come back. They ALWAYS come back. Why do you think I live up here?"', 'log-quest');
             ui.log("Madge presses a perfectly ordinary pebble into your hand. (+5 runes, Madge's Lucky Pebble)", 'log-loot-legendary');
             game.fx.burst(p.group.position, 0xffd76e, 26);
-            game.save();
-            checkAchievements(game);   // instant feedback (madge_six once riddles reach 6 in iter E; harmless now)
-          } else {
             ui.log('Madge nods slowly, needles never stopping.', 'log-quest');
+            game.save();
+            checkAchievements(game);
+            openMadgeDialog();   // straight on to the §E riddles (lead-in handles #4)
+          } else if (s.riddles === 6) {
+            // the sixth riddle: +5 runes and the 'Madge-Approved' title
+            p.runes += 5;
+            p.title = 'Madge-Approved';
+            if (!p.titles.includes('Madge-Approved')) p.titles.push('Madge-Approved');
+            ui.hideDialog();
+            ui.log('Madge: "Six. SIX. Nobody does six. Take the title. Take it and go before I get attached."', 'log-quest');
+            game.fx.burst(p.group.position, 0xffd76e, 30);
+            game.save();
+            checkAchievements(game);   // fires madge_six (riddles >= 6)
+          } else {
+            // riddles 1, 2, 4, 5: +5 runes from riddle 4 onward (the §E payout)
+            if (s.riddles >= 4) p.runes += 5;
+            ui.log('Madge nods slowly, needles never stopping.', 'log-quest');
+            game.save();
             openMadgeDialog();
           }
         },
@@ -360,6 +400,204 @@ function openMadgeDialog() {
       { label: 'Not now', action: () => ui.hideDialog() },
     ],
   });
+}
+
+// ===== Iteration E: the Hidden Layer (Larder knock, urns, treasure digs, Grim) =====
+
+// boss uniques the dig's uniqueChance can grant (the named, boss-keyed UNIQUES).
+// Excludes the secret/vanity/quest uniques (vault, madge, carp, larder, greta_*)
+// and the maps themselves. The dig grants the FIRST one the hero doesn't own.
+const DIG_UNIQUE_KEYS = [
+  'korgrim', 'vexnar', 'morgrath', 'ossus', 'vargoth', 'emberlord', 'pyraxis',
+  'hrimnir', 'seraphel', 'noctyra', 'spireshade', 'vorthal',
+  'quaranth', 'echo', 'khronaxis', 'grim', 'glowcap_carbine',
+];
+
+// does the player already hold (bag or equipped) a unique with this item id?
+function ownsUniqueId(p, id) {
+  if (p.inventory.some((it) => it?.id === id)) return true;
+  return ALL_SLOTS.some((slot) => p.equipped[slot]?.id === id);
+}
+
+// grant a random boss unique the player doesn't already own (dig uniqueChance).
+// Returns the granted item, or null if they own them all.
+function grantRandomUnownedUnique(p) {
+  const pool = [...DIG_UNIQUE_KEYS];
+  for (let i = pool.length - 1; i > 0; i--) {   // shuffle
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  for (const key of pool) {
+    const item = makeUnique(key);
+    if (item && !ownsUniqueId(p, item.id)) { p.addItem(game, item); return item; }
+  }
+  return null;
+}
+
+// --- the Larder knock puzzle (Frostveil mound: F x3 within 6s) ---
+function knockLarderMound() {
+  const s = game.player.secrets;
+  const now = performance.now();
+  const w = game._larderKnocks ?? (game._larderKnocks = { count: 0, t: 0 });
+  if (now - w.t > 6000) w.count = 0;   // window lapsed -> start over
+  w.t = now;
+  w.count++;
+  game.audio.knock();
+  if (w.count >= 3) {
+    w.count = 0;
+    s.pocket.larderOpen = true;
+    game.frostveil.openLarder();
+    game.ui.log('The trapdoor thaws with a groan, and the dark below exhales old fur and older gold.', 'log-quest');
+    sfx.levelup();
+    game.fx.burst(game.frostveil.larderMoundPos, 0xffb060, 26);
+    game.save();
+    checkAchievements(game);
+  } else {
+    game.ui.log('Something underneath shifts.', 'log-sys');
+  }
+}
+
+// --- the Larder urns (F once each; index 0/1 gold, index 2 the relic) ---
+function openLarderUrn(urn, idx) {
+  if (urn.looted) return;
+  const p = game.player;
+  const s = p.secrets;
+  urn.looted = true;
+  // persist THIS urn so the reward never re-drops on reload (each urn is a
+  // one-time payout — gold and relic alike). ensureSecrets guarantees the array.
+  (s.pocket.urns ||= [false, false, false])[idx] = true;
+  if (idx === 0) {
+    p.gainGold(game, 8000);
+    sfx.loot();
+    game.fx.burst(urn.group.position, 0xffd87a, 18);
+    game.ui.log('A clay urn cracks: eight thousand in cold coin.', 'log-loot');
+  } else if (idx === 1) {
+    p.gainGold(game, 12000);
+    sfx.loot();
+    game.fx.burst(urn.group.position, 0xffd87a, 18);
+    game.ui.log('Another urn, fatter: twelve thousand more.', 'log-loot');
+  } else {
+    // the relic urn — the vanity BiS + the title
+    p.addItem(game, makeUnique('larder'));
+    p.title = 'the Hoardfinder';
+    if (!p.titles.includes('the Hoardfinder')) p.titles.push('the Hoardfinder');
+    s.pocket.larderLooted = true;
+    sfx.levelup();
+    game.fx.burst(urn.group.position, 0xffd76e, 30);
+    game.ui.log("The Badger's Hoard is yours. (title: the Hoardfinder)", 'log-loot-legendary');
+  }
+  game.save();
+  checkAchievements(game);   // fires hoardfinder on the relic urn
+}
+
+// nearest unlooted urn within ~3u (also used by the tick interact prompt)
+function nearestLarderUrn() {
+  if (game.zone !== 'larder' || !game.player) return null;
+  const pos = game.player.group.position;
+  for (let i = 0; i < game.larder.urns.length; i++) {
+    const u = game.larder.urns[i];
+    if (u.looted) continue;
+    if (Math.hypot(pos.x - u.x, pos.z - u.z) < 3) return { urn: u, idx: i };
+  }
+  return null;
+}
+
+// --- treasure-map digs (held undug map + standing on its spot -> 2.5s cast) ---
+// the held undug map whose spot is the current zone and the player is standing on
+function diggableMap() {
+  if (!game.player) return null;
+  const s = game.player.secrets;
+  const pos = game.player.group.position;
+  for (const item of game.player.inventory) {
+    if (item?.kind !== 'map') continue;
+    if (s.maps[item.key] === 'dug') continue;
+    const sp = item.spot;
+    if (sp.zone !== game.zone) continue;
+    if (Math.hypot(pos.x - sp.x, pos.z - sp.z) <= sp.r) return item;
+  }
+  return null;
+}
+
+function startDig() {
+  const p = game.player;
+  if (!p.alive || digging || fishing || p.casting) return;
+  const map = diggableMap();
+  if (!map) { game.ui.log('The map insists. The ground disagrees.', 'log-sys'); return; }
+  digging = { t: 0, dur: 2.5, map, digCd: 0 };
+  game.audio.dig();
+  game.ui.showCastBar('Digging…');
+}
+
+function resolveDig() {
+  const p = game.player;
+  const s = p.secrets;
+  const map = digging.map;
+  const loot = map.loot;
+  // a small decorative chest at the player's feet, disposed after a few seconds
+  const chest = new THREE.Mesh(
+    new THREE.BoxGeometry(1.0, 0.7, 0.7),
+    new THREE.MeshLambertMaterial({ color: 0x6b4a2e })
+  );
+  const cp = p.group.position;
+  chest.position.set(cp.x, heightAt(cp.x, cp.z) + 0.35, cp.z);
+  scene.add(chest);
+  setTimeout(() => { scene.remove(chest); chest.geometry.dispose(); chest.material.dispose(); }, 4000);
+
+  const gold = loot.gold[0] + Math.floor(Math.random() * (loot.gold[1] - loot.gold[0] + 1));
+  p.gainGold(game, gold);
+  p.addItem(game, makeGenerated(ALL_SLOTS[Math.floor(Math.random() * ALL_SLOTS.length)], loot.rarity, p.level));
+  let uniqueLine = '';
+  if (loot.uniqueChance > 0 && Math.random() < loot.uniqueChance) {
+    const u = grantRandomUnownedUnique(p);
+    if (u) uniqueLine = ` And — buried deeper — ${u.name}.`;
+  }
+  s.maps[map.key] = 'dug';
+  // consume the map from the bag
+  const mi = p.inventory.indexOf(map);
+  if (mi >= 0) p.inventory.splice(mi, 1);
+  sfx.loot();
+  game.fx.burst(chest.position, 0xffd76e, 26);
+  game.ui.log(`The shovel strikes wood. ${gold} gold, and the map was right after all.${uniqueLine}`, 'log-loot');
+  game.save();
+  checkAchievements(game);   // fires cartographer at 5 dug
+}
+
+// --- the Grim ritual (sanctum nodes: dim -> bright -> flicker) ---
+const RITUAL_ORDER = ['dim', 'bright', 'flicker'];
+
+function nearestRitualNode() {
+  if (game.zone !== 'sanctum' || !game.player || !game.sanctum.ritualNodes) return null;
+  const pos = game.player.group.position;
+  for (const n of game.sanctum.ritualNodes) {
+    if (Math.hypot(pos.x - n.x, pos.z - n.z) < 3) return n;
+  }
+  return null;
+}
+
+function pressRitualNode(node) {
+  const s = game.player.secrets;
+  const expected = RITUAL_ORDER[s.ritual.step];
+  if (node.glint === expected) {
+    game.audio.ritualHum();
+    s.ritual.step++;
+    if (s.ritual.step >= 3) {
+      // correct full sequence — crack the Cradle and summon Grim at the dais
+      s.ritual.step = 0;
+      s.ritual.done = true;
+      sfx.levelup();
+      game.fx.burst(new THREE.Vector3(0, heightAt(0, 346) + 1.5, 346), 0xffd24a, 34);
+      game.ui.log('The Star Cradle cracks. Something has come to audit.', 'log-quest');
+      summonGrim(game);
+      game.save();
+      checkAchievements(game);
+    } else {
+      game.ui.log('A star answers.', 'log-quest');
+    }
+  } else {
+    s.ritual.step = 0;
+    game.ui.log('The stars lose their place.', 'log-sys');
+    sfx.warnMove();
+  }
 }
 
 // --- the Stillest Pond: fishing for junk (and one absurd legendary) ---
@@ -371,6 +609,7 @@ const JUNK_CATCHES = [
 ];
 let fishing = null;     // { t, dur } while the line is out
 let fishingCd = 0;
+let digging = null;     // { t, dur, map, digCd } while a treasure dig is in progress (§E.2)
 
 function startFishing() {
   const p = game.player;
@@ -629,8 +868,18 @@ window.addEventListener('keydown', (e) => {
     } else if (game.zone === 'crypt' && !game.player.secrets.vault &&
                Math.hypot(p.x - dungeon.chestPos.x, p.z - dungeon.chestPos.z) < 4) {
       openVault();
-    } else if (game.zone === 'world' && p.distanceTo(world.pondPos) < 4.5) {
-      startFishing();
+    } else if (game.zone === 'world' && p.distanceTo(world.pondPos) < 4.5 && !diggableMap()) {
+      startFishing();   // a held, undug pond map on its spot wins F over fishing (the clue sends you here)
+    } else if (game.zone === 'frostveil' && !game.player.secrets.pocket.larderOpen &&
+               p.distanceTo(game.frostveil.larderMoundPos) < 4) {
+      knockLarderMound();   // §E.1 — F x3 within 6s thaws the trapdoor
+    } else if (nearestLarderUrn()) {
+      const { urn, idx } = nearestLarderUrn();
+      openLarderUrn(urn, idx);   // §E.1 — loot the urns (0/1 gold, 2 relic)
+    } else if (nearestRitualNode()) {
+      pressRitualNode(nearestRitualNode());   // §E.4 — Grim summon ritual order
+    } else if (diggableMap()) {
+      startDig();   // §E.2 — held undug map + on its spot -> 2.5s dig cast
     } else {
       const portal = nearestPortal();
       if (portal && game.player.alive) usePortal(portal);
@@ -749,6 +998,26 @@ document.querySelectorAll('#class-select .class-card').forEach((card) => {
   }
 }
 
+// Iteration E secrets default-fill. createPlayer sets only {vault, riddles};
+// save() serializes p.secrets wholesale, so these fields must EXIST on both the
+// new-game and saved paths for the dig/larder/ritual/mimic flows to round-trip.
+function ensureSecrets(p) {
+  p.secrets ??= { vault: false, riddles: 0 };
+  p.secrets.vault ??= false;
+  p.secrets.riddles ??= 0;
+  p.secrets.maps ??= {};
+  p.secrets.pocket ??= { larderOpen: false, larderLooted: false };
+  // per-urn looted flags so a returning hero can't re-loot for +20,000g and a
+  // duplicate relic every reload. Legacy saves that only carried the one-time
+  // larderLooted boolean back-fill all three as looted (the relic urn is what
+  // set larderLooted, and it's looted last, so the gold urns were taken too).
+  p.secrets.pocket.urns ??= p.secrets.pocket.larderLooted
+    ? [true, true, true]
+    : [false, false, false];
+  p.secrets.ritual ??= { step: 0, done: false };
+  p.secrets.mimics ??= {};
+}
+
 function startGame(classId, saved) {
   game.player = createPlayer(classId, scene);
   // createPlayer (player.js) lacks these iteration-D fields — guarantee them on
@@ -757,6 +1026,7 @@ function startGame(classId, saved) {
   game.player.achievements ??= {};
   game.player.titles ??= [];
   game.player.title ??= null;
+  ensureSecrets(game.player);   // new-game path: fields exist so save() round-trips them
 
   if (saved) {
     const p = game.player;
@@ -795,6 +1065,7 @@ function startGame(classId, saved) {
     p.glow = saved.glow ?? false;
     p.secrets = saved.secrets ?? { vault: false, riddles: 0 };
     p.secrets.vault ??= false; p.secrets.riddles ??= 0;
+    ensureSecrets(p);   // §E: default-fill maps/pocket/ritual/mimics (old saves stay loadable)
     // iteration D: achievements/bestiary/titles — default-fill on all prior versions
     p.counters = saved.counters ?? {};
     p.achievements = saved.achievements ?? {};
@@ -816,6 +1087,21 @@ function startGame(classId, saved) {
     });
     game.slain = new Set(saved.slain ?? []);
     if (p.secrets.vault) dungeon.openChest();         // the hoard stays plundered
+
+    // §E: a returning hero who solved the knock puzzle finds the mound already
+    // thawed (and allPortals() includes the entry portal via the larderOpen gate).
+    if (p.secrets.pocket.larderOpen) game.frostveil.openLarder();
+    // §E.1: re-mark already-looted urns so they don't re-drop gold/relic on reload.
+    // larder.js rebuilds every urn as { looted:false } each page load; restore the
+    // persisted per-urn flags (ensureSecrets back-fills legacy larderLooted saves).
+    const lootedUrns = p.secrets.pocket.urns;
+    if (lootedUrns) game.larder.urns.forEach((u, i) => { if (lootedUrns[i]) u.looted = true; });
+    // §E: remove any placed mimic the hero already cleared in a prior session, so
+    // a returning hero doesn't re-find a sprung chest (in-session respawns still
+    // happen at elite 45s, letting counters.mimic farm toward exterminator).
+    for (const e of [...game.enemies]) {
+      if (e.mimicId && p.secrets.mimics[e.mimicId]) removeEnemy(game, e);
+    }
   }
 
   game.ui.buildActionBar(game, game.onCast);
@@ -891,13 +1177,29 @@ function tick() {
     const nearChest = game.zone === 'crypt' && !game.player.secrets.vault &&
       Math.hypot(p.x - dungeon.chestPos.x, p.z - dungeon.chestPos.z) < 4;
     const nearNode = game.player.alive ? nearestNode() : null;
+    // §E interact targets (computed once; no map pip — the entry portal is gated)
+    const alive = game.player.alive;
+    const nearMound = alive && game.zone === 'frostveil' &&
+      !game.player.secrets.pocket.larderOpen &&
+      p.distanceTo(game.frostveil.larderMoundPos) < 4;
+    const nearUrn = alive && nearestLarderUrn();
+    const nearRitual = alive && nearestRitualNode();
+    const nearDig = alive && !digging && diggableMap();
 
     if (game.player.alive && npcDist < 5 && !game.ui.dialogOpen()) {
       game.ui.setInteractPrompt(true, 'Talk');
     } else if (nearChest && game.player.alive) {
       game.ui.setInteractPrompt(true, "Open Vargoth's hoard");
-    } else if (nearPond && game.player.alive && !fishing) {
-      game.ui.setInteractPrompt(true, 'Fish');
+    } else if (nearPond && game.player.alive && !fishing && !nearDig) {
+      game.ui.setInteractPrompt(true, 'Fish');   // dig wins over fish when a pond map is held on its spot (matches F-chain)
+    } else if (nearMound && !game.ui.dialogOpen()) {
+      game.ui.setInteractPrompt(true, 'Knock');
+    } else if (nearUrn) {
+      game.ui.setInteractPrompt(true, 'Open the urn');
+    } else if (nearRitual && !game.ui.dialogOpen()) {
+      game.ui.setInteractPrompt(true, 'Touch the star');
+    } else if (nearDig && !digging) {
+      game.ui.setInteractPrompt(true, 'Dig');
     } else if (nearSign && !game.ui.dialogOpen()) {
       game.ui.setInteractPrompt(true, 'The Ashen Highlands — recommended level 55+');
     } else if (frostSign && !game.ui.dialogOpen()) {
@@ -966,6 +1268,37 @@ function tick() {
           game.ui.hideCastBar();
           resolveCatch();
         }
+      }
+    }
+
+    // treasure dig in progress: moving / death / casting cancels (mirror fishing).
+    // play game.audio.dig() periodically so it reads as a scrape-loop (§E.2).
+    if (digging) {
+      if (!game.player.alive || game.player.anim.moving || game.player.casting) {
+        digging = null;
+        game.ui.hideCastBar();
+        game.ui.log('You stop digging. The ground keeps its secret a while longer.', 'log-sys');
+      } else {
+        digging.t += dt;
+        digging.digCd -= dt;
+        if (digging.digCd <= 0) { game.audio.dig(); digging.digCd = 0.4; }
+        game.ui.updateCastBar(digging.t / digging.dur);
+        if (digging.t >= digging.dur) {
+          game.ui.hideCastBar();
+          resolveDig();
+          digging = null;
+        }
+      }
+    }
+
+    // §E.3: persist cleared placed-mimics so a returning hero doesn't re-find them.
+    // combat.js handles counters.mimic + slain (mimic is elite) automatically; here
+    // we only flag the secrets clear when an observed placed mimic is dead. In-session
+    // the mimic still respawns (elite 45s) so counters.mimic can climb to 10.
+    for (const e of game.enemies) {
+      if (e.mimicId && !e.alive && !game.player.secrets.mimics[e.mimicId]) {
+        game.player.secrets.mimics[e.mimicId] = true;
+        game.save();
       }
     }
 

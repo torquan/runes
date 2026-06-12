@@ -43,6 +43,8 @@ export const CLASS_STYLES = {
   tamsin:     { tunic: 0x2e3a4a, trim: 0x8a6a2a, weapon: 'none' },                   // time-broken survivor (questgiver NPC)
   // ---- Iteration C: the bench ----
   smith:      { tunic: 0x6a5240, trim: 0xb08040, weapon: 'none', skin: 0xc89a6a },   // Smith Halla: leather-apron browns, brass trim
+  // ---- Iteration E: the hidden layer ----
+  grim:       { tunic: 0x2a2a33, trim: 0xffd24a, weapon: 'staff', skin: 0x6a6a72 },   // Grim, the Tax Collector — slate + gold ledger trim
 };
 
 export function buildHumanoid(style) {
@@ -264,6 +266,71 @@ export function buildSporeling() {
 
   g.userData.rig = { legs, headPivot };
   g.userData.height = 1.4;
+  return g;
+}
+
+// Mimic — a fake loot chest that bites. Reads as a plausible CLOSED chest until
+// it aggros, then the lid snaps open and there are teeth. Faces +Z (humanoid
+// convention; the type is humanoid:true). rig = { lid, tongue, legs:[] }.
+export function buildMimic() {
+  const g = new THREE.Group();
+  const wood = lambert(0x5a3a22);
+  const woodDark = lambert(0x3e2716);
+  const iron = lambert(0x4a4038);
+  const gum = lambert(0x7a2a32);          // dark red maw interior
+
+  // chest base: wide, low box sitting on the floor
+  const base = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 0.72), wood));
+  base.position.y = 0.25;
+  g.add(base);
+  // iron banding on the base (front face, +Z)
+  const bandV = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.04), iron);
+  bandV.position.set(0, 0.25, 0.38);
+  const bandL = bandV.clone(); bandL.position.x = -0.42;
+  const bandR = bandV.clone(); bandR.position.x = 0.42;
+  g.add(bandV, bandL, bandR);
+  // a tarnished lock-plate, the "loot" tell
+  const lock = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.2, 0.05), lambert(0x8a6a2a));
+  lock.position.set(0, 0.22, 0.39);
+  g.add(lock);
+
+  // dark maw inside the base (only visible once the lid opens)
+  const maw = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.3, 0.56), gum);
+  maw.position.set(0, 0.42, 0);
+  g.add(maw);
+
+  // stubby tongue inside the mouth, hinged at the back so it can lash
+  const tongue = new THREE.Group();
+  tongue.position.set(0, 0.42, -0.18);
+  const tongueMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.4), lambert(0xb04a52));
+  tongueMesh.position.z = 0.2;
+  tongue.add(tongueMesh);
+  g.add(tongue);
+
+  // lid: a NAMED PIVOT hinged at the back-top edge of the base so lid.rotation.x
+  // opens it. Built around the hinge so the lid mesh hangs forward of the pivot.
+  const lid = new THREE.Group();
+  lid.position.set(0, 0.5, -0.36);        // hinge: back top edge
+  const lidTop = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.18, 0.72), wood));
+  lidTop.position.set(0, 0.09, 0.36);
+  const lidBand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.72), iron);
+  lidBand.position.set(0, 0.09, 0.36);
+  lid.add(lidTop, lidBand);
+  // upper teeth ridge under the lid lip (the second tell once it gapes)
+  const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.06), lambert(0xe8e0d0));
+  teeth.position.set(0, -0.02, 0.66);
+  lid.add(teeth);
+  // two tiny eye glints just under the lid lip, faint until revealed
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff5a3a });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 5), eyeMat);
+  eyeL.position.set(-0.22, 0.02, 0.7);
+  const eyeR = eyeL.clone();
+  eyeR.position.x = 0.22;
+  lid.add(eyeL, eyeR);
+  g.add(lid);
+
+  g.userData.rig = { lid, tongue, legs: [] };
+  g.userData.height = 1.0;
   return g;
 }
 
@@ -497,6 +564,34 @@ export function animateSporeling(group, state, elapsed) {
   } else {
     r.headPivot.position.x = 0.4;
     r.headPivot.scale.set(1, 1, 1);
+  }
+}
+
+// Mimic animation. state._revealed (set by the entities.js reveal hook) decides
+// whether the lid is shut (a chest at rest) or thrown wide (teeth out).
+export function animateMimic(group, state, elapsed) {
+  const r = group.userData.rig;
+  if (!r || state.dead) return;
+  const lid = r.lid, tongue = r.tongue;
+
+  if (state._revealed) {
+    // thrown open and menacing: lid yawns wide, tongue lashes
+    const open = -1.1;
+    if (state.attackT >= 0) {
+      // lid-chomp: snap down toward closed then back open over the attack window
+      const t = Math.min(state.attackT, 1);
+      const chomp = Math.sin(t * Math.PI);          // 0 -> 1 -> 0
+      lid.rotation.x = open + chomp * 0.95;          // bite down, then gape again
+      tongue.rotation.x = -0.4 - chomp * 0.5;
+    } else {
+      // idle-revealed: a slow hungry breathe + a low tongue lash
+      lid.rotation.x = open + Math.sin(elapsed * 3) * 0.08;
+      tongue.rotation.x = -0.3 + Math.sin(elapsed * 4.5) * 0.2;
+    }
+  } else {
+    // dormant: reads as a closed chest. The ONLY tell is the faint lid breathe.
+    lid.rotation.x = Math.sin(elapsed * 1.6) * 0.04;
+    tongue.rotation.x = 0;
   }
 }
 

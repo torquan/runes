@@ -170,7 +170,52 @@ export const UNIQUES = {
     stats: { dmg: 220, crit: 0.025 },              // power ≈ 270, weapon BiS for the band
     flavor: 'A mushroom that learned to spit back. It glows when it is happy, which is whenever it is hitting something.',
   },
+
+  // ===== The Hidden Layer (Iteration E) secret rewards =====
+  larder: {  // granted via makeUnique('larder') by the integrator's urn looting — vanity, NOT BiS
+    id: 'the_badgers_hoard', name: "The Badger's Hoard", slot: 'relic', rarity: 'legendary', unique: true,
+    stats: { hp: 120, speed: 0.03 },              // power ≈ 80, deliberately LOW (far under The Last Seal's 362)
+    flavor: 'Whatever lived down here counted its coins twice a night. Now you carry the lot.',
+  },
+  grim: {    // dropped by Grim (rollDrops branch below) AND grantable via makeUnique('grim')
+    id: 'the_final_invoice', name: 'The Final Invoice', slot: 'relic', rarity: 'legendary', unique: true,
+    stats: { dmg: 130, hp: 420, crit: 0.06, healPower: 0.05 },  // power ≈ 366 ≈ The Last Seal — a sidegrade BiS relic
+    flavor: 'Marked PAID IN FULL, in a hand that does not shake. The debt was always going to be you.',
+  },
 };
+
+// ---------- treasure maps (Iteration E — rare word-clue drops) ----------
+// Inventory items kind:'map', slot:null, stats:{} → player.equip already rejects
+// them (shipped player.js). The CLUE is READABLE DATA on the item; the integrator
+// reads item.clue for the tooltip/log, item.spot{zone,x,z,r} for the dig F-check,
+// item.loot{gold,rarity,uniqueChance} to compose the dig reward, and item.key to
+// set secrets.maps[key]='dug' (the cartographer achievement counts dug values ≥5).
+// EXACTLY 5 keys — each entry carries a matching `key` field.
+export const TREASURE_MAPS = {
+  aurora_stones: { key: 'aurora_stones', id: 'map_aurora_stones', name: 'Smudged Vellum Map', kind: 'map', slot: null, rarity: 'uncommon', unique: false, value: 0,
+    clue: 'Where the aurora touches three standing stones and none of them agree on the time. Dig at the eldest.',
+    spot: { zone: 'frostveil', x: -300, z: 30, r: 4 }, loot: { gold: [6000, 9000], rarity: 'epic', uniqueChance: 0.10 } },
+  ash_road: { key: 'ash_road', id: 'map_ash_road', name: 'Charred Map Fragment', kind: 'map', slot: null, rarity: 'uncommon', unique: false, value: 0,
+    clue: 'Follow the dirt road in the meadow until it forgets it was a road. Where the last ember-tree leans west, turn the soil.',
+    spot: { zone: 'highlands', x: 190, z: -20, r: 4 }, loot: { gold: [7000, 10000], rarity: 'epic', uniqueChance: 0.10 } },
+  pond_reeds: { key: 'pond_reeds', id: 'map_pond_reeds', name: 'Water-Stained Map', kind: 'map', slot: null, rarity: 'uncommon', unique: false, value: 0,
+    clue: 'A pond so still it forgot to ripple. Stand among the seven reeds. The fattest one is lying — dig under the second-fattest.',
+    spot: { zone: 'world', x: 56, z: -70, r: 4 }, loot: { gold: [5000, 8000], rarity: 'rare', uniqueChance: 0.0 } },
+  crypt_throne: { key: 'crypt_throne', id: 'map_crypt_throne', name: 'Map Drawn in Soot', kind: 'map', slot: null, rarity: 'rare', unique: false, value: 0,
+    clue: 'A king who would not die kept a king who could not stop counting. Behind the throne, where the wall pretends to be a wall.',
+    spot: { zone: 'crypt', x: 340, z: 0, r: 4 }, loot: { gold: [9000, 13000], rarity: 'epic', uniqueChance: 0.15 } },
+  sanctum_orrery: { key: 'sanctum_orrery', id: 'map_sanctum_orrery', name: 'Map of Star-Threads', kind: 'map', slot: null, rarity: 'rare', unique: false, value: 0,
+    clue: 'Beneath the wheel of little worlds, where the floor is glass and the glass is sky. Dig where no star is painted.',
+    spot: { zone: 'sanctum', x: 0, z: 300, r: 4 }, loot: { gold: [10000, 14000], rarity: 'epic', uniqueChance: 0.15 } },
+};
+
+// build a TREASURE_MAPS entry into a full inventory instance (fresh uid). stats:{}
+// + slot:null + kind:'map' mean player.equip already rejects equipping it.
+export function makeTreasureMap(key) {
+  const t = TREASURE_MAPS[key];
+  if (!t) return null;
+  return { uid: rollUid(), ...t, stats: {} };
+}
 
 // elites that also drop uniques + the trial/crypt bosses
 const ELITE_NAMED = new Set(['boss', 'banditking']);
@@ -540,6 +585,29 @@ export function rollDrops(enemy) {
   const kind = enemy.kind;
   const ilvl = enemy.level || 1;
   const drops = [];
+
+  // Iteration E — treasure map: 4% on ANY elite or boss kill (bosses are elite:true).
+  // Additive (push, not return) so it RIDES the boss/elite branches below, all of
+  // which build on this same `drops` array and `return drops`. No dug-check here
+  // (rollDrops has no secrets ref) — the integrator no-ops a dug map at dig time,
+  // and a held duplicate is harmless.
+  if (enemy.elite && Math.random() < 0.04) {
+    const mk = makeTreasureMap(pick(Object.keys(TREASURE_MAPS)));
+    if (mk) drops.push(mk);
+  }
+
+  // Iteration E — Grim, the Tax Collector (ritual-summoned secret boss). Not in any
+  // EXPANSION/TIME set; its own branch. Guaranteed epic relic-weighted + the Final
+  // Invoice every kill (rollDrops can't see game.slain, so the "100% first / 25%
+  // re-kill" nicety is dropped to keep this gameless; the invoice is a unique relic,
+  // so duplicate handling is the inventory's concern).
+  if (kind === 'grim') {
+    drops.push(makeGenerated(weightedPick({ weapon: 20, armor: 20, trinket: 20, relic: 40 }), 'epic', ilvl));
+    const u = makeUnique('grim');
+    if (u) drops.push(u);
+    if (Math.random() < 0.35) drops.push(makeMaterial('sealfragment', 1));
+    return drops;
+  }
 
   if (TRIAL_CRYPT_BOSSES.has(kind)) {
     // trial/crypt boss: 1 guaranteed epic (or 18% a set piece instead) + 22% unique
