@@ -18,15 +18,18 @@ npm run dev    # → http://localhost:5173
 | Drag mouse | Orbit camera · wheel zooms |
 | Both mouse buttons | Run forward while steering with the mouse |
 | Click / `Tab` | Target an enemy |
-| `1`–`4` | Skills (per class) |
-| `F` | Talk to Pioneer Barnaby |
+| `1`–`4` | Skills (per class); `5` is your level-55 control skill |
+| `F` | Talk / interact (questgivers, Smith Halla's bench, gather nodes, portals…) |
 | `Space` | Jump (some things must be jumped over…) |
 | `Q` | Drink a Pioneer's Draught |
 | `R` | Consume a glowing rune (+1 weapon damage, permanent) |
 | `I` | Open the bag (equip gear; sell tab when trading with Barnaby) |
 | `C` (or click your portrait) | Character sheet |
 | `T` | Talents |
-| `Esc` | Close shop/dialog / clear target |
+| `B` | Smith Halla's crafting bench |
+| `K` | The Konown — bestiary, achievements, and titles |
+| `=` / `[` | Your second control skill (when dual-classed) / third capstone (full bar) |
+| `Esc` | Close shop/dialog/panel / clear target |
 
 ## What's in the box
 
@@ -93,9 +96,49 @@ npm run dev    # → http://localhost:5173
 - **A mount and other vanities** — Barnaby now sells the Saddle of the
   Howling Plains (a great golden boar, +60% speed out of combat) and the
   Phial of Starlight (you glitter; it does nothing; it's wonderful).
+- **The Verdant Hollow** — the level 106–118 grotto beneath the drowned
+  Sanctum, where the dead Hollow Star's spilled light made everything grow back
+  at once — beautiful the way a flooded cellar full of orchids is beautiful.
+  Magenta glowcaps, bracket-fungus shelves the size of trees, glow-pools, and
+  spores rising like slow snow. Sporecallers spit clouds across the whole vale,
+  Hollowstalkers are the exact green of the moss, Bloomwardens are people the
+  Hollow grew *through*, and the spore-queen **Spireshade, the Mother-Bloom**
+  rules the pool. At the spiral's center waits the world boss **Vorthal, the
+  First Root** — it does not so much fight as *garden*. Greta Thornby, botanist
+  and exile, is right about all of it and furious about being right.
+- **The Last Hour** — the level 116–120 capstone dungeon at the bottom of the
+  Hollow's spiral: a sunken horologium of black basalt and dim brass where Time
+  itself was buried to keep it from ending the world. Four bosses learned four
+  new lessons your feet will have to answer — when to **DODGE** a sweeping arc,
+  when to **SOAK** a falling weight (running only makes it worse), when to
+  **RUN** until a chain snaps, and when the floor remembers it was never solid.
+  At the heart, **Khronaxis, the Hour That Was Kept** keeps the game's one and
+  only enrage timer — kill him cleanly, or the clock starts hitting back. He
+  raises the cap to **120**. Tamsin Verge, the time-broken survivor, gates the
+  descent.
+- **Crafting & gathering** — resource nodes bloom across every zone (meadow
+  fiber, cinderbark, frostcore, stardust, spore-silk); press `F` to harvest.
+  Bring it all to **Smith Halla's bench** (`B`): brew elixirs, forge a
+  Hollowforge Kit into the slot of your choosing, and — for a king's ransom —
+  Reseal a Relic to wring another sliver of power from a unique. Four armor
+  **sets** drop across the world, each with two- and four-piece bonuses for the
+  hero who farms the matching slots.
+- **New class tricks at 55** — every class learns one act of control: the
+  Warrior's Shield Bash (stun + interrupt), the Scout's Hamstring Shot (slow +
+  interrupt), the Mage's Frost Nova (root the room), the Priest's Word of
+  Stillness (silence). Bosses shrug the lockdown off into a stagger — but the
+  interrupt always lands, so they earn their keep where it counts.
+- **The Konown** — a field journal on `K`: a **bestiary** that fills in as you
+  slay each kind (everything starts as a polite *???*), **achievements** for the
+  deeds worth bragging about, and **titles** to wear on your character sheet —
+  from Boarbane to the Timekeeper to the Ascended.
 - **Secrets** — the meadow keeps a terrible golden rumor, a hermit on the rim
-  asks riddles, a pond rewards patience, a wall in the crypt does not echo
-  like the others… and the old words (↑↑↓↓←→←→BA) still mean something.
+  asks riddles (six, now, if you've the patience), a pond rewards patience, a
+  wall in the crypt does not echo like the others… and the old words
+  (↑↑↓↓←→←→BA) still mean something. There is, they say, a trapdoor in the
+  frost that thaws if you knock just so; chests in the deep places that have
+  teeth; and somewhere down the hours, an invoice nobody remembers running
+  up — and a collector who remembers everything.
 - **Save & continue** — progress persists in localStorage; the title screen
   offers to continue your hero. Picking a class card forges a new hero
   (and erases the old save). Old saves migrate forward — the talent rework
@@ -108,3 +151,9 @@ If you played a version without saves, open the browser console and run
 `__veteran('warrior')` (or `'scout'`, `'mage'`, `'priest'`) — you'll be
 restored to level 10 with the first chapter complete, ready to choose your
 second class.
+
+For jumping straight to the late game, the console also offers
+`__veteran2('<class>')` (a level-90 hero at the Frostveil's gate, Pyraxis
+already slain) and `__veteran3('<class>')` (a level-118 hero standing at the
+mouth of the Last Hour, the whole Hollow behind them and the dungeon still
+fresh).

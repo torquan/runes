@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { fbm, heightAt, WORLD_SIZE, HIGHLANDS } from './noise.js';
-import { SHOP, xpForLevel } from './player.js';
+import { SHOP, xpForLevel, BAR_KEYS } from './player.js';
 import { RARITY, rarityColor, statSummary, totalEquippedStats, ALL_SLOTS,
          RECIPES, SETS, MATERIALS, canCraft, craft, equippedSetCounts } from './items.js';
 import { BRANCHES, ranks, CAPSTONE_THRESHOLD, BRANCH_CAP, MASTERY_THRESHOLD,
@@ -101,7 +101,7 @@ export function createUi() {
       list.forEach((skill, i) => {
         const isCap = i >= capStart;
         const color = isCap ? primaryColor : skill.color;
-        const keyLabel = i < 9 ? String(i + 1) : i === 9 ? '0' : i === 10 ? '-' : '=';  // keys 1-9,0,-,=
+        const keyLabel = BAR_KEYS[i] ? BAR_KEYS[i].label : '';  // shared map (player.js): 1-9,0,-,=,[
         const slot = document.createElement('div');
         slot.className = 'skill-slot' + (isCap ? ' capstone' : '');
         slot.innerHTML = `

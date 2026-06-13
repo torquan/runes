@@ -66,6 +66,29 @@ export function xpForLevel(level) { return Math.round(100 + 0.5 * Math.pow(level
 // Talents are unaffected — the book's 90 ranks still close at level 99.
 export const LEVEL_CAP = 120;
 
+// Action-bar keybindings — the SINGLE source of truth shared by the keydown
+// handler (main.js) and the slot labels (ui.js) so they can never drift apart.
+// Index = bar slot. barSkills() can be as long as 13 for a dual-class hero at
+// level≥55 (5 primary + 5 secondary control skills = 10 base) with all three
+// talent capstones unlocked (+3): slots 0–12. The first 12 keep the historic
+// 1–9,0,-,= layout; slot 12 (the 3rd capstone for a dual-classer) gets `[` so
+// every slot the bar can render has a keyboard binding, not just the first 12.
+export const BAR_KEYS = [
+  { code: 'Digit1', label: '1' },
+  { code: 'Digit2', label: '2' },
+  { code: 'Digit3', label: '3' },
+  { code: 'Digit4', label: '4' },
+  { code: 'Digit5', label: '5' },
+  { code: 'Digit6', label: '6' },
+  { code: 'Digit7', label: '7' },
+  { code: 'Digit8', label: '8' },
+  { code: 'Digit9', label: '9' },
+  { code: 'Digit0', label: '0' },
+  { code: 'Minus', label: '-' },
+  { code: 'Equal', label: '=' },
+  { code: 'BracketLeft', label: '[' },
+];
+
 // Barnaby's wares — the gold sink. Training prices escalate forever.
 export const SHOP = [
   {

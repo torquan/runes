@@ -10,7 +10,7 @@ import { buildLarder } from './larder.js';
 import { buildGathering, gatherNode } from './gathering.js';
 import { heightAt, HIGHLANDS } from './noise.js';
 import { spawnEnemies, spawnNpc, spawnGateNpc, spawnExpansionNpcs, spawnHollowNpc, spawnHorologiumNpc, updateEnemies, updateNpc, spawnTrialBoss, summonGrim, removeEnemy } from './entities.js';
-import { createPlayer, updatePlayer, CLASSES } from './player.js';
+import { createPlayer, updatePlayer, CLASSES, BAR_KEYS } from './player.js';
 import { freshTalents, sanitizeTalents } from './talents.js';
 import { castSkill, updateCombat, clickTarget, tabTarget, useRune, createFx } from './combat.js';
 import { createQuests, createHighlandQuests, createFrostveilQuests, createSanctumQuests, createHollowQuests, createHorologiumQuests } from './quests.js';
@@ -833,13 +833,11 @@ window.addEventListener('keydown', (e) => {
   if (konamiIdx === KONAMI.length) { konamiIdx = 0; festivalOfTheBoar(); }
 
   if (e.code === 'Tab') { e.preventDefault(); tabTarget(game); }
-  if (e.code.startsWith('Digit')) {
-    const n = parseInt(e.code.slice(5), 10);
-    if (n >= 1 && n <= 9) castSkill(game, n - 1);   // 1–9 -> indices 0–8
-    else if (n === 0) castSkill(game, 9);           // 0 -> index 9
-  }
-  if (e.code === 'Minus') castSkill(game, 10);       // - -> 11th slot (3rd capstone)
-  if (e.code === 'Equal') castSkill(game, 11);       // = -> 12th slot (dual-class + new skill headroom)
+  // action bar: BAR_KEYS (player.js) is the shared map of slot index -> key,
+  // so every slot the bar can render (up to 13 for a dual-class hero with all
+  // three capstones) has a binding and labels never drift from this handler.
+  const barIdx = BAR_KEYS.findIndex((k) => k.code === e.code);
+  if (barIdx >= 0) castSkill(game, barIdx);
   if (e.code === 'KeyR') useRune(game);
   if (e.code === 'KeyQ') game.player.usePotion(game);
   if (e.code === 'KeyI') game.ui.toggleInventory(game);

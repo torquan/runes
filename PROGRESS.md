@@ -13,7 +13,7 @@ each iteration ends in a green `vite build` and a commit.
 | 4 | **C** — Crafting/gathering + item sets + new class skills | ✅ done |
 | 5 | **D** — Achievements/Bestiary panel (K) + titles | ✅ done |
 | 6 | **E** — Hidden layer: the Larder, treasure maps, mimics, Grim, riddles | ✅ done |
-| 7 | Balance audit, smoke test, docs (README/PLAN) | pending |
+| 7 | Balance audit, smoke test, docs (README/PLAN/CLAUDE.md) | ✅ done |
 
 Orchestration: one multi-agent workflow per iteration (Opus subagents),
 parallel authors on disjoint new files → single integrator for hub files
@@ -196,3 +196,40 @@ parallel authors on disjoint new files → single integrator for hub files
   every kill (vanity-tier, dupe-safe); `secrets.ritual.done` persisted
   but unread (achievement keys off slain); disguised mimics are
   targetable-but-silent (reads as intended tension).
+
+### Iteration 7 — F: Balance audit, regression, docs (2026-06-13) ✅
+
+- Workflow `iteration-f-polish` (5 agents, ~460k tokens): balance auditor
+  + full-game regression tester + docs author in parallel → fixer →
+  final build. Build green.
+- **Balance audit: zero blockers.** Every shipped ENEMY_TYPES row is
+  byte-exact vs the EXPANSION.md ledger; sustain floors pass for all
+  bosses (melee dps within 0.2% of 0.08×maxHp); mechanic bursts 38–45%;
+  soak punish exactly 2.40×; no XP dead zones at 105→106 or 118→120;
+  repeat-kill 20% covers all new elites; gear power perfectly linear
+  across the 105→120 ilvls (relic 1.42–1.59× matches the Last Seal
+  precedent); zero passive DR re-confirmed across gear/sets/elixirs/
+  skills. Conservative-side drift only (Hollow trash XP 11.4–14% vs the
+  15% label — slower, never easier; left as-is per policy).
+- **Regression: one real blocker, fixed.** A dual-classer with all three
+  capstones renders 13 bar slots; idx 12 (Dash) had no key and two slots
+  both labeled `=`. Fix: shared `BAR_KEYS` map in player.js (1–9, 0, -,
+  =, `[`) drives BOTH the keydown dispatch and the bar labels — they can
+  never drift again. Everything else clean: fresh-hero chapter 1, panels
+  on a virgin save, v4→v5 migration, Korgrim/crypt/vault/frostveil/
+  Noctyra/fishing/Konami, byte-stable double-save roundtrip.
+- **Docs:** README (controls incl. B/K/=/`[`, What's-in-the-box entries
+  for all five iterations, vague secrets teaser), PLAN.md (§6 The Hollow
+  Hour ✅ SHIPPED; backlog ticks for enrage timers + per-class skills),
+  CLAUDE.md fully updated for future sessions (new file rows, pocket
+  geography with bounds, the four mechanic kinds + resolve semantics,
+  ccImmune/enrage/mimic fields, save v5 list, BAR_KEYS, __veteran3).
+
+## Final state
+
+The Hollow Hour shipped end to end: 2 new zones (one secret), 1 new
+dungeon, 13 new enemy types incl. 5 bosses, 4 brand-new mechanic kinds +
+enrage, crafting/gathering, item sets, 4 control skills, 18 achievements
++ bestiary + titles, treasure maps, mimics, a ritual boss, 3 riddles,
+cap 105→120, save v4→v5. Seven commits, each build-green and
+smoke-tested. Not pushed/deployed — that's the operator's call.
